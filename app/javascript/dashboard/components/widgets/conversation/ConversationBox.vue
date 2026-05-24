@@ -4,6 +4,7 @@ import ConversationHeader from './ConversationHeader.vue';
 import DashboardAppFrame from '../DashboardApp/Frame.vue';
 import EmptyState from './EmptyState/EmptyState.vue';
 import MessagesView from './MessagesView.vue';
+import ReplyBox from './ReplyBox.vue';
 
 export default {
   components: {
@@ -11,6 +12,7 @@ export default {
     DashboardAppFrame,
     EmptyState,
     MessagesView,
+    ReplyBox,
   },
   props: {
     inboxId: {
@@ -32,7 +34,7 @@ export default {
     },
   },
   data() {
-    return { activeIndex: 0 };
+    return { activeIndex: 0, isPopOutReplyBox: false };
   },
   computed: {
     ...mapGetters({
@@ -56,6 +58,12 @@ export default {
     showContactPanel() {
       return this.isContactPanelOpen && this.currentChat.id;
     },
+    isCommentInbox() {
+      return !!this.currentChat?.custom_attributes?.comment_id;
+    },
+    shouldShowFullScreenDashboardApp() {
+      return this.isCommentInbox && this.dashboardApps.length > 0;
+    },
   },
   watch: {
     'currentChat.inbox_id': {
@@ -69,6 +77,17 @@ export default {
     'currentChat.id'() {
       this.fetchLabels();
       this.activeIndex = 0;
+    },
+    // Auto-refresh comment panel iframe after agent sends outgoing message
+    'currentChat.messages.length'(newLen, oldLen) {
+      if (!this.shouldShowFullScreenDashboardApp) return;
+      if (!newLen || newLen <= (oldLen || 0)) return;
+      const messages = this.currentChat.messages || [];
+      const latest = messages[messages.length - 1];
+      // message_type 1 = outgoing (agent reply); 0 = incoming
+      if (latest?.message_type !== 1) return;
+      // Wait for Graph API to index the new comment before refreshing
+      setTimeout(() => this.broadcastIframeRefresh(), 2500);
     },
   },
   mounted() {
@@ -84,6 +103,16 @@ export default {
     },
     onDashboardAppTabChange(index) {
       this.activeIndex = index;
+    },
+    broadcastIframeRefresh() {
+      const iframes = this.$el?.querySelectorAll?.('iframe');
+      if (!iframes) return;
+      iframes.forEach(frame => {
+        frame.contentWindow?.postMessage(
+          JSON.stringify({ event: 'chatwoot-dashboard-app:refresh' }),
+          '*'
+        );
+      });
     },
   },
 };
@@ -102,7 +131,11 @@ export default {
       :show-back-button="isOnExpandedLayout && !isInboxView"
     />
     <woot-tabs
-      v-if="dashboardApps.length && currentChat.id"
+      v-if="
+        dashboardApps.length &&
+        currentChat.id &&
+        !shouldShowFullScreenDashboardApp
+      "
       :index="activeIndex"
       class="h-10"
       @change="onDashboardAppTabChange"
@@ -116,26 +149,54 @@ export default {
         is-compact
       />
     </woot-tabs>
-    <div v-show="!activeIndex" class="flex h-full min-h-0 m-0">
-      <MessagesView
-        v-if="currentChat.id"
-        :inbox-id="inboxId"
-        :is-inbox-view="isInboxView"
-      />
-      <EmptyState
-        v-if="!currentChat.id && !isInboxView"
-        :is-on-expanded-layout="isOnExpandedLayout"
-      />
-      <slot />
+    <div
+      v-if="shouldShowFullScreenDashboardApp"
+      class="flex h-full min-h-0 m-0 flex-col"
+    >
+      <div class="flex-1 min-h-0 overflow-hidden">
+        <DashboardAppFrame
+          :key="currentChat.id + '-comment-' + dashboardApps[0].id"
+          is-visible
+          :config="dashboardApps[0].content"
+          :position="0"
+          :current-chat="currentChat"
+        />
+      </div>
+      <div
+        class="flex relative flex-col"
+        :class="{
+          'modal-mask': isPopOutReplyBox,
+          'bg-n-surface-1': !isPopOutReplyBox,
+        }"
+      >
+        <ReplyBox
+          :pop-out-reply-box="isPopOutReplyBox"
+          @update:pop-out-reply-box="isPopOutReplyBox = $event"
+        />
+      </div>
     </div>
-    <DashboardAppFrame
-      v-for="(dashboardApp, index) in dashboardApps"
-      v-show="activeIndex - 1 === index"
-      :key="currentChat.id + '-' + dashboardApp.id"
-      :is-visible="activeIndex - 1 === index"
-      :config="dashboardApps[index].content"
-      :position="index"
-      :current-chat="currentChat"
-    />
+    <template v-else>
+      <div v-show="!activeIndex" class="flex h-full min-h-0 m-0">
+        <MessagesView
+          v-if="currentChat.id"
+          :inbox-id="inboxId"
+          :is-inbox-view="isInboxView"
+        />
+        <EmptyState
+          v-if="!currentChat.id && !isInboxView"
+          :is-on-expanded-layout="isOnExpandedLayout"
+        />
+        <slot />
+      </div>
+      <DashboardAppFrame
+        v-for="(dashboardApp, index) in dashboardApps"
+        v-show="activeIndex - 1 === index"
+        :key="currentChat.id + '-' + dashboardApp.id"
+        :is-visible="activeIndex - 1 === index"
+        :config="dashboardApps[index].content"
+        :position="index"
+        :current-chat="currentChat"
+      />
+    </template>
   </div>
 </template>

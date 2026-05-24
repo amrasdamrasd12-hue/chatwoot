@@ -103,3 +103,7 @@ CLAUDE.local.md
 .pnpm-store/*
 local/
 Procfile.worktree
+
+# Local dev banner - never push to production
+config/initializers/local_dev_banner.rb
+public/local_dev.css

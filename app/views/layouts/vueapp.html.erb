@@ -72,6 +72,9 @@
     <% end %>
     <%= vite_client_tag %>
     <%= vite_javascript_tag @application_pack %>
+    <% if Rails.env.development? && File.exist?(Rails.root.join('public', 'local_dev.css')) %>
+      <link rel="stylesheet" href="/local_dev.css" />
+    <% end %>
   </head>
   <body class="text-slate-600">
     <div id="app"></div>
