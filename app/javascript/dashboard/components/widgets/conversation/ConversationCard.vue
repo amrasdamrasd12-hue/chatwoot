@@ -149,22 +149,35 @@ const showMetaSection = computed(() => {
 
 const hasSlaPolicyId = computed(() => props.chat?.sla_policy_id);
 
-// Eltafouk: source platform/page label shown above the contact name for comment inboxes.
+// Eltafouk: source platform/page badge shown above the contact name for comment inboxes.
 const ELTAFOUK_FB_PAGES = {
   111233573822014: 'التفوق للثانوية العامة',
   282599361610166: 'كتاب التفوق',
   909009775622795: 'التفوق للنشر والتوزيع',
 };
-const commentSourceLabel = computed(() => {
+const commentSourceInfo = computed(() => {
   const ca =
     props.chat?.custom_attributes || props.chat?.customAttributes || {};
   const platform = ca.platform;
   const postId = ca.post_id || ca.postId || '';
-  if (!platform) return '';
-  if (platform === 'instagram') return 'انستجرام';
+  if (!platform) return null;
+  if (platform === 'instagram') {
+    return { platform: 'instagram', label: 'انستجرام', color: '#E4405F' };
+  }
   const pageId = String(postId).split('_')[0];
   const pageName = ELTAFOUK_FB_PAGES[pageId];
-  return pageName ? `فيسبوك · ${pageName}` : 'فيسبوك';
+  return {
+    platform: 'facebook',
+    label: pageName ? `فيسبوك · ${pageName}` : 'فيسبوك',
+    color: '#1877F2',
+  };
+});
+const commentSourceBadgeStyle = computed(() => {
+  if (!commentSourceInfo.value) return {};
+  return {
+    backgroundColor: `${commentSourceInfo.value.color}1A`,
+    color: commentSourceInfo.value.color,
+  };
 });
 
 const showLabelsSection = computed(() => {
@@ -363,11 +376,35 @@ const deleteConversation = () => {
           <PriorityMark :priority="chat.priority" class="flex-shrink-0" />
         </div>
       </div>
-      <div
-        v-if="commentSourceLabel"
-        class="mx-2 mt-1 truncate text-[10px] font-medium leading-none text-n-slate-10"
-      >
-        {{ commentSourceLabel }}
+      <div v-if="commentSourceInfo" class="mx-2 mt-1 flex items-center min-w-0">
+        <div
+          class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-medium leading-none min-w-0 max-w-full"
+          :style="commentSourceBadgeStyle"
+        >
+          <svg
+            v-if="commentSourceInfo.platform === 'facebook'"
+            viewBox="0 0 24 24"
+            class="size-3 flex-shrink-0"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              d="M24 12.073C24 5.404 18.627 0 12 0S0 5.404 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.356c0-3.016 1.792-4.682 4.533-4.682 1.312 0 2.686.235 2.686.235v2.965h-1.514c-1.49 0-1.955.93-1.955 1.886v2.265h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"
+            />
+          </svg>
+          <svg
+            v-else
+            viewBox="0 0 24 24"
+            class="size-3 flex-shrink-0"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 2.163c3.204 0 3.584.012 4.85.07 1.366.062 2.633.336 3.608 1.311.975.975 1.249 2.242 1.311 3.608.058 1.266.07 1.646.07 4.85 0 3.205-.012 3.585-.07 4.85-.062 1.366-.336 2.633-1.311 3.608-.975.975-2.242 1.249-3.608 1.311-1.266.058-1.645.07-4.85.07-3.204 0-3.584-.012-4.85-.07-1.366-.062-2.633-.336-3.608-1.311-.975-.975-1.249-2.242-1.311-3.608-.058-1.266-.07-1.645-.07-4.85 0-3.204.012-3.584.07-4.85.062-1.366.336-2.633 1.311-3.608.975-.975 2.242-1.249 3.608-1.311 1.266-.058 1.646-.07 4.85-.07zM12 0C8.741 0 8.332.014 7.052.072 5.775.13 4.903.333 4.14.63a5.876 5.876 0 00-2.126 1.384A5.876 5.876 0 00.63 4.14C.333 4.903.131 5.775.072 7.052.014 8.332 0 8.741 0 12s.014 3.668.072 4.948c.059 1.277.261 2.149.558 2.912a5.876 5.876 0 001.384 2.126 5.876 5.876 0 002.126 1.384c.763.297 1.635.499 2.912.558C8.332 23.986 8.741 24 12 24s3.668-.014 4.948-.072c1.277-.059 2.149-.261 2.912-.558a5.876 5.876 0 002.126-1.384 5.876 5.876 0 001.384-2.126c.297-.763.499-1.635.558-2.912.058-1.28.072-1.689.072-4.948s-.014-3.668-.072-4.948c-.059-1.277-.261-2.149-.558-2.912a5.876 5.876 0 00-1.384-2.126A5.876 5.876 0 0019.86.63c-.763-.297-1.635-.499-2.912-.558C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zm0 10.162a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"
+            />
+          </svg>
+          <span class="truncate">{{ commentSourceInfo.label }}</span>
+        </div>
       </div>
       <div
         class="flex items-center my-0 mx-2 pt-0.5 flex-1 min-w-0 ltr:pr-16 rtl:pl-16"
