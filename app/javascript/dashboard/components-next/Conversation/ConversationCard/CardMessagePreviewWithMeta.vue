@@ -28,9 +28,11 @@ const lastNonActivityMessageContent = computed(() => {
   const { lastNonActivityMessage = {}, customAttributes = {} } =
     props.conversation;
   const { email: { subject } = {} } = customAttributes;
-  return getPlainText(
+  const raw = getPlainText(
     subject || lastNonActivityMessage?.content || t('CHAT_LIST.NO_CONTENT')
   );
+  // Eltafouk: strip the post link suffix that n8n appends to comment messages.
+  return raw.replace(/\s*🔗\s*البوست:.*$/s, '').trim();
 });
 
 const assignee = computed(() => {

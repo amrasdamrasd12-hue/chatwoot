@@ -52,6 +52,25 @@ const inboxIcon = computed(() => {
   return getInboxIconByType(channelType, medium);
 });
 
+// Eltafouk: surface the source platform/page above the contact name for the
+// Facebook & Instagram Comments inbox.
+const ELTAFOUK_FB_PAGES = {
+  111233573822014: 'التفوق للثانوية العامة',
+  282599361610166: 'كتاب التفوق',
+  909009775622795: 'التفوق للنشر والتوزيع',
+};
+
+const commentSourceLabel = computed(() => {
+  const { customAttributes = {} } = props.conversation;
+  const { platform, post_id: postId } = customAttributes;
+  if (!platform) return '';
+  if (platform === 'instagram') return 'انستجرام';
+  // Facebook post_id format is `pageid_objectid`.
+  const pageId = (postId || '').split('_')[0];
+  const pageName = ELTAFOUK_FB_PAGES[pageId];
+  return pageName ? `فيسبوك · ${pageName}` : 'فيسبوك';
+});
+
 const lastActivityAt = computed(() => {
   const timestamp = props.conversation?.timestamp;
   return timestamp ? shortTimestamp(dynamicTime(timestamp)) : '';
@@ -98,6 +117,12 @@ const onCardClick = e => {
       rounded-full
     />
     <div class="flex flex-col w-full gap-1 min-w-0">
+      <span
+        v-if="commentSourceLabel"
+        class="text-[11px] font-medium leading-none text-n-slate-10 truncate"
+      >
+        {{ commentSourceLabel }}
+      </span>
       <div class="flex items-center justify-between h-6 gap-2">
         <h4 class="text-base font-medium truncate text-n-slate-12">
           {{ currentContactName }}
