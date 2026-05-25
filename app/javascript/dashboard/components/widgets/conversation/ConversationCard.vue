@@ -149,6 +149,24 @@ const showMetaSection = computed(() => {
 
 const hasSlaPolicyId = computed(() => props.chat?.sla_policy_id);
 
+// Eltafouk: source platform/page label shown above the contact name for comment inboxes.
+const ELTAFOUK_FB_PAGES = {
+  111233573822014: 'التفوق للثانوية العامة',
+  282599361610166: 'كتاب التفوق',
+  909009775622795: 'التفوق للنشر والتوزيع',
+};
+const commentSourceLabel = computed(() => {
+  const ca =
+    props.chat?.custom_attributes || props.chat?.customAttributes || {};
+  const platform = ca.platform;
+  const postId = ca.post_id || ca.postId || '';
+  if (!platform) return '';
+  if (platform === 'instagram') return 'انستجرام';
+  const pageId = String(postId).split('_')[0];
+  const pageName = ELTAFOUK_FB_PAGES[pageId];
+  return pageName ? `فيسبوك · ${pageName}` : 'فيسبوك';
+});
+
 const showLabelsSection = computed(() => {
   return props.chat.labels?.length > 0 || hasSlaPolicyId.value;
 });
@@ -344,6 +362,12 @@ const deleteConversation = () => {
           </span>
           <PriorityMark :priority="chat.priority" class="flex-shrink-0" />
         </div>
+      </div>
+      <div
+        v-if="commentSourceLabel"
+        class="mx-2 mt-1 truncate text-[10px] font-medium leading-none text-n-slate-10"
+      >
+        {{ commentSourceLabel }}
       </div>
       <div
         class="flex items-center my-0 mx-2 pt-0.5 flex-1 min-w-0 ltr:pr-16 rtl:pl-16"

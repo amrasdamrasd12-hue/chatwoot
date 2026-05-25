@@ -35,8 +35,8 @@ const lastNonActivityMessageContent = computed(() => {
   const raw = getPlainText(
     subject || lastNonActivityMessage?.content || t('CHAT_LIST.NO_CONTENT')
   );
-  // Eltafouk: strip the post link suffix that n8n appends to comment messages.
-  return raw.replace(/\s*🔗\s*البوست:.*$/s, '').trim();
+  // Eltafouk: strip the '📎 البوست: <url>' suffix that n8n appends to comment messages.
+  return raw.replace(/\s*[\u{1F4CE}\u{1F517}]\s*البوست:[\s\S]*$/u, '').trim();
 });
 
 const assignee = computed(() => {

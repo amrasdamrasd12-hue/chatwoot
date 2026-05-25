@@ -41,7 +41,11 @@ export default {
     parsedLastMessage() {
       const { content_attributes: contentAttributes } = this.message;
       const { email: { subject } = {} } = contentAttributes || {};
-      return this.getPlainText(subject || this.message.content);
+      const raw = this.getPlainText(subject || this.message.content);
+      // Eltafouk: strip the '📎 البوست: <url>' suffix that n8n appends to comment messages.
+      return raw
+        .replace(/\s*[\u{1F4CE}\u{1F517}]\s*البوست:[\s\S]*$/u, '')
+        .trim();
     },
     lastMessageFileType() {
       const [{ file_type: fileType } = {}] = this.message.attachments;
@@ -79,9 +83,8 @@ export default {
 
 <template>
   <div
-    class="overflow-hidden text-ellipsis whitespace-nowrap font-bubble-text"
+    class="overflow-hidden text-ellipsis whitespace-nowrap font-bubble-text [unicode-bidi:plaintext]"
     dir="auto"
-    style="unicode-bidi: plaintext"
   >
     <template v-if="showMessageType">
       <fluent-icon
