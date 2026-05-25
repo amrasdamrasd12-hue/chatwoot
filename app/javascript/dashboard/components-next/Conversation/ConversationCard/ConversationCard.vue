@@ -61,12 +61,16 @@ const ELTAFOUK_FB_PAGES = {
 };
 
 const commentSourceLabel = computed(() => {
-  const { customAttributes = {} } = props.conversation;
-  const { platform, post_id: postId } = customAttributes;
+  const customAttributes =
+    props.conversation.custom_attributes ||
+    props.conversation.customAttributes ||
+    {};
+  const platform = customAttributes.platform;
+  const postId = customAttributes.post_id || customAttributes.postId || '';
   if (!platform) return '';
   if (platform === 'instagram') return 'انستجرام';
   // Facebook post_id format is `pageid_objectid`.
-  const pageId = (postId || '').split('_')[0];
+  const pageId = postId.split('_')[0];
   const pageName = ELTAFOUK_FB_PAGES[pageId];
   return pageName ? `فيسبوك · ${pageName}` : 'فيسبوك';
 });
