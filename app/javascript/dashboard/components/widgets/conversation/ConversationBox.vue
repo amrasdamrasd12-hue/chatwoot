@@ -4,7 +4,6 @@ import ConversationHeader from './ConversationHeader.vue';
 import DashboardAppFrame from '../DashboardApp/Frame.vue';
 import EmptyState from './EmptyState/EmptyState.vue';
 import MessagesView from './MessagesView.vue';
-import ReplyBox from './ReplyBox.vue';
 
 export default {
   components: {
@@ -12,7 +11,6 @@ export default {
     DashboardAppFrame,
     EmptyState,
     MessagesView,
-    ReplyBox,
   },
   props: {
     inboxId: {
@@ -34,7 +32,7 @@ export default {
     },
   },
   data() {
-    return { activeIndex: 0, isPopOutReplyBox: false };
+    return { activeIndex: 0 };
   },
   computed: {
     ...mapGetters({
@@ -160,18 +158,6 @@ export default {
           :config="dashboardApps[0].content"
           :position="0"
           :current-chat="currentChat"
-        />
-      </div>
-      <div
-        class="flex relative flex-col"
-        :class="{
-          'modal-mask': isPopOutReplyBox,
-          'bg-n-surface-1': !isPopOutReplyBox,
-        }"
-      >
-        <ReplyBox
-          :pop-out-reply-box="isPopOutReplyBox"
-          @update:pop-out-reply-box="isPopOutReplyBox = $event"
         />
       </div>
     </div>
