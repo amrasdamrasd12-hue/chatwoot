@@ -1,5 +1,21 @@
 import { computed } from 'vue';
 
+// Eltafouk: per-page comment inboxes are Channel::Api under the hood, but we
+// want them to render as platform-specific comment channels in the sidebar,
+// not the generic "{}" API icon. Update this map if a new comment inbox is
+// added (the inbox IDs are stable after creation).
+const ELTAFOUK_COMMENT_INBOXES = {
+  24: { platform: 'facebook' },
+  25: { platform: 'facebook' },
+  26: { platform: 'facebook' },
+  27: { platform: 'instagram' },
+};
+
+const ELTAFOUK_COMMENT_PLATFORM_COLORS = {
+  facebook: '#1877F2',
+  instagram: '#E1306C',
+};
+
 export function useChannelIcon(inbox) {
   const channelTypeIconMap = {
     'Channel::Api': 'i-woot-api',
@@ -25,6 +41,14 @@ export function useChannelIcon(inbox) {
   const channelIcon = computed(() => {
     const inboxDetails = inbox.value || inbox;
     const type = inboxDetails.channel_type;
+
+    // Eltafouk comment inboxes — render as a comment bubble regardless of
+    // their underlying Channel::Api type. Platform distinction is conveyed
+    // via color (see useChannelColor).
+    if (ELTAFOUK_COMMENT_INBOXES[inboxDetails.id]) {
+      return 'i-lucide-message-circle';
+    }
+
     let icon = channelTypeIconMap[type];
 
     if (type === 'Channel::Email' && inboxDetails.provider) {
@@ -69,6 +93,14 @@ export function useChannelColor(inbox) {
   const channelColor = computed(() => {
     const inboxDetails = inbox.value || inbox;
     const type = inboxDetails.channel_type;
+
+    // Eltafouk comment inboxes — platform-tinted (blue FB / pink IG) instead
+    // of the generic API gray.
+    const commentMeta = ELTAFOUK_COMMENT_INBOXES[inboxDetails.id];
+    if (commentMeta) {
+      return ELTAFOUK_COMMENT_PLATFORM_COLORS[commentMeta.platform];
+    }
+
     let color = channelColorMap[type];
 
     if (type === 'Channel::Email' && inboxDetails.provider) {

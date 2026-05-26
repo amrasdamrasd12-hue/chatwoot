@@ -69,7 +69,9 @@ const channelColor = computed(() => {
   </span>
   <div
     class="flex-1 truncate min-w-0 transition-colors duration-300"
-    :class="[unattendedCount ? 'text-[#b91c1c] font-medium' : '']"
+    :class="[
+      unattendedCount ? 'font-medium text-n-slate-12' : 'text-n-slate-11',
+    ]"
   >
     {{ label }}
   </div>
