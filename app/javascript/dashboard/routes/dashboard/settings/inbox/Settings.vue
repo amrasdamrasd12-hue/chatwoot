@@ -70,6 +70,7 @@ export default {
       senderNameType: 'friendly',
       businessName: '',
       locktoSingleConversation: false,
+      isCommentInbox: false,
       allowMessagesAfterResolved: true,
       continuityViaEmail: true,
       selectedInboxName: '',
@@ -413,6 +414,7 @@ export default {
         this.selectedFeatureFlags = this.inbox.selected_feature_flags || [];
         this.replyTime = this.inbox.reply_time;
         this.locktoSingleConversation = this.inbox.lock_to_single_conversation;
+        this.isCommentInbox = Boolean(this.inbox.is_comment_inbox);
         this.selectedPortalSlug = this.inbox.help_center
           ? this.inbox.help_center.slug
           : '';
@@ -436,6 +438,7 @@ export default {
               ).id
             : null,
           lock_to_single_conversation: this.locktoSingleConversation,
+          is_comment_inbox: this.isCommentInbox,
           sender_name_type: this.senderNameType,
           business_name: this.businessName || null,
           channel: {
@@ -804,6 +807,20 @@ export default {
                   'INBOX_MGMT.SETTINGS_POPUP.LOCK_TO_SINGLE_CONVERSATION_SUB_TEXT'
                 )
               }}
+            </p>
+          </label>
+          <label class="pb-4">
+            {{ $t('INBOX_MGMT.SETTINGS_POPUP.IS_COMMENT_INBOX') }}
+            <select v-model="isCommentInbox">
+              <option :value="true">
+                {{ $t('INBOX_MGMT.SETTINGS_POPUP.IS_COMMENT_INBOX_ENABLED') }}
+              </option>
+              <option :value="false">
+                {{ $t('INBOX_MGMT.SETTINGS_POPUP.IS_COMMENT_INBOX_DISABLED') }}
+              </option>
+            </select>
+            <p class="pb-1 text-sm not-italic text-n-slate-11">
+              {{ $t('INBOX_MGMT.SETTINGS_POPUP.IS_COMMENT_INBOX_SUB_TEXT') }}
             </p>
           </label>
 
