@@ -34,9 +34,24 @@ const countLabel = computed(() =>
   unattendedCount.value > 99 ? '99+' : unattendedCount.value
 );
 
+// Eltafouk: per-page comment inboxes (Channel::Api) get platform tints
+// instead of the generic API orange. Keep IDs in sync with the override
+// in ../icon/provider.js.
+const ELTAFOUK_COMMENT_TINTS = {
+  24: '#1877F2', // FB · التفوق للثانوية العامة
+  25: '#1877F2', // FB · كتاب التفوق
+  26: '#1877F2', // FB · التفوق للنشر والتوزيع
+  27: '#E1306C', // IG · eltafouk_book
+};
+
 const channelColor = computed(() => {
   const type = props.inbox.channel_type;
   const medium = props.inbox.medium;
+
+  const commentTint = ELTAFOUK_COMMENT_TINTS[props.inbox.id];
+  if (commentTint) {
+    return `color: ${commentTint};`;
+  }
 
   if (
     type === 'Channel::Whatsapp' ||
