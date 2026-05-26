@@ -118,7 +118,13 @@ export default {
         class="-mt-0.5 align-middle text-n-slate-11 inline-block"
         icon="lock-closed"
       />
-      <template v-else-if="messageByAgent">
+      <!-- Eltafouk: delivery ticks (sent/delivered/read/failed) only make
+           sense for DMs. A Facebook/Instagram comment is public the moment
+           it posts; there's no per-recipient delivery state. Outgoing
+           relay messages on the comments inbox carry no real status either —
+           the Chatwoot message is just an echo of what n8n already sent
+           to FB. Hide the icons entirely for them. -->
+      <template v-else-if="messageByAgent && !isFromFbPageUi">
         <svg
           v-if="isFailed"
           class="-mt-0.5 align-middle inline-block"
