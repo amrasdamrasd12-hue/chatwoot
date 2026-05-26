@@ -143,6 +143,16 @@ const statusToShow = computed(() => {
 
   return MESSAGE_STATUS.PROGRESS;
 });
+
+// Eltafouk: outgoing messages that were relayed from FB/IG UI (the page
+// replied directly on Facebook/Instagram, not from Chatwoot). The n8n
+// workflow tags them with content_attributes.external_source = 'fb_page_ui'.
+const isFromFbPageUi = computed(
+  () => contentAttributes.value?.external_source === 'fb_page_ui'
+);
+const fbPageUiLabel = '↩ رد من الصفحة';
+const fbPageUiTooltip =
+  'هذا الرد أُرسل من واجهة فيسبوك/انستجرام مباشرة، وليس من Chatwoot';
 </script>
 
 <template>
@@ -152,6 +162,13 @@ const statusToShow = computed(() => {
     </div>
     <span v-if="showAgentName" class="inline opacity-75">
       {{ `· ${agentNameToShow}` }}
+    </span>
+    <span
+      v-if="isFromFbPageUi"
+      :title="fbPageUiTooltip"
+      class="inline-flex items-center gap-0.5 rounded-md bg-[#1877F2]/10 px-1.5 py-px text-[10px] font-semibold leading-none text-[#1877F2]"
+    >
+      {{ fbPageUiLabel }}
     </span>
     <Icon v-if="isPrivate" icon="i-lucide-lock-keyhole" class="size-3" />
     <MessageStatus v-if="showStatusIndicator" :status="statusToShow" />
