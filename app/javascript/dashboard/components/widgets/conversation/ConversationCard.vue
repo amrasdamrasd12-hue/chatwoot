@@ -131,24 +131,6 @@ const formattedPhoneNumber = computed(() => {
   return null;
 });
 
-const showInboxName = computed(() => {
-  return (
-    !props.hideInboxName &&
-    isInboxNameVisible.value &&
-    inboxesList.value.length > 1
-  );
-});
-
-const showMetaSection = computed(() => {
-  return (
-    showInboxName.value ||
-    (props.showAssignee && assignee.value.name) ||
-    props.chat.priority
-  );
-});
-
-const hasSlaPolicyId = computed(() => props.chat?.sla_policy_id);
-
 // Eltafouk: source platform/page badge shown above the contact name for comment inboxes.
 const ELTAFOUK_FB_PAGES = {
   111233573822014: 'التفوق للثانوية العامة',
@@ -179,6 +161,28 @@ const commentSourceBadgeStyle = computed(() => {
     color: commentSourceInfo.value.color,
   };
 });
+
+const showInboxName = computed(() => {
+  // Eltafouk: when our colored platform/page pill (commentSourceInfo) renders,
+  // suppress Chatwoot's default InboxName badge so the same page name isn't
+  // shown twice on the same card.
+  if (commentSourceInfo.value) return false;
+  return (
+    !props.hideInboxName &&
+    isInboxNameVisible.value &&
+    inboxesList.value.length > 1
+  );
+});
+
+const showMetaSection = computed(() => {
+  return (
+    showInboxName.value ||
+    (props.showAssignee && assignee.value.name) ||
+    props.chat.priority
+  );
+});
+
+const hasSlaPolicyId = computed(() => props.chat?.sla_policy_id);
 
 const showLabelsSection = computed(() => {
   return props.chat.labels?.length > 0 || hasSlaPolicyId.value;
