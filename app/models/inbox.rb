@@ -83,6 +83,8 @@ class Inbox < ApplicationRecord
   after_update_commit :dispatch_update_event
 
   scope :order_by_name, -> { order('lower(name) ASC') }
+  scope :comment_inboxes, -> { where(is_comment_inbox: true) }
+  scope :non_comment_inboxes, -> { where(is_comment_inbox: false) }
 
   # Adds multiple members to the inbox
   # @param user_ids [Array<Integer>] Array of user IDs to add as members

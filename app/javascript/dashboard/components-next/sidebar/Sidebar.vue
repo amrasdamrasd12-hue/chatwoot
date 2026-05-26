@@ -191,9 +191,10 @@ useEmitter('fetch_inbox_unattended_counts', () => {
 const getInboxCount = inbox => getInboxUnattendedCount.value(inbox.id);
 
 // Eltafouk: per-page comment inboxes get their own sidebar section ("التعليقات")
-// modeled after the DMs ("المحادثات") layout. Update these constants if a new
-// page is added or folder IDs change.
-const COMMENT_INBOX_IDS = [24, 25, 26, 27];
+// modeled after the DMs ("المحادثات") layout. Inboxes are split via the
+// backend-managed `is_comment_inbox` flag. The comment-scoped custom-filter
+// folder IDs below are still hardcoded — those need migrating to a flag too if
+// they ever multiply.
 const ALL_COMMENTS_FOLDER_ID = 2;
 const COMMENT_UNASSIGNED_FOLDER_ID = 3;
 const COMMENT_UNREPLIED_FOLDER_ID = 4;
@@ -203,9 +204,11 @@ const COMMENT_FOLDER_IDS = [
   COMMENT_UNREPLIED_FOLDER_ID,
 ];
 
+const isCommentInbox = inbox => Boolean(inbox.is_comment_inbox);
+
 const channelsUnreadTotal = computed(() =>
   inboxes.value
-    .filter(inbox => !COMMENT_INBOX_IDS.includes(inbox.id))
+    .filter(inbox => !isCommentInbox(inbox))
     .reduce((total, inbox) => total + getInboxCount(inbox), 0)
 );
 
@@ -217,10 +220,10 @@ const sortedInboxes = computed(() =>
 );
 
 const commentInboxes = computed(() =>
-  sortedInboxes.value.filter(i => COMMENT_INBOX_IDS.includes(i.id))
+  sortedInboxes.value.filter(isCommentInbox)
 );
 const nonCommentInboxes = computed(() =>
-  sortedInboxes.value.filter(i => !COMMENT_INBOX_IDS.includes(i.id))
+  sortedInboxes.value.filter(i => !isCommentInbox(i))
 );
 const commentsUnreadTotal = computed(() =>
   commentInboxes.value.reduce((total, inbox) => total + getInboxCount(inbox), 0)

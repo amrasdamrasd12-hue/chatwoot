@@ -74,7 +74,9 @@ class ConversationFinder
     @inbox_ids = if params[:inbox_id]
                    @current_user.assigned_inboxes.where(id: params[:inbox_id])
                  else
-                   @current_user.assigned_inboxes.pluck(:id)
+                   # Aggregate views (All / Mentions / Unattended) exclude comment inboxes —
+                   # those live in their own sidebar section and are reached via explicit inbox_id.
+                   @current_user.assigned_inboxes.non_comment_inboxes.pluck(:id)
                  end
   end
 
@@ -87,11 +89,7 @@ class ConversationFinder
   end
 
   def find_conversation_by_inbox
-    @conversations = current_account.conversations
-
-    return unless params[:inbox_id]
-
-    @conversations = @conversations.where(inbox_id: @inbox_ids)
+    @conversations = current_account.conversations.where(inbox_id: @inbox_ids)
   end
 
   def find_all_conversations

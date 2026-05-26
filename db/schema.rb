@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_05_05_090004) do
+ActiveRecord::Schema[7.1].define(version: 2026_05_26_144844) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -919,8 +919,10 @@ ActiveRecord::Schema[7.1].define(version: 2026_05_05_090004) do
     t.integer "sender_name_type", default: 0, null: false
     t.string "business_name"
     t.jsonb "csat_config", default: {}, null: false
+    t.boolean "is_comment_inbox", default: false, null: false
     t.index ["account_id"], name: "index_inboxes_on_account_id"
     t.index ["channel_id", "channel_type"], name: "index_inboxes_on_channel_id_and_channel_type"
+    t.index ["is_comment_inbox"], name: "index_inboxes_on_is_comment_inbox_partial", where: "(is_comment_inbox = true)"
     t.index ["portal_id"], name: "index_inboxes_on_portal_id"
   end
 
