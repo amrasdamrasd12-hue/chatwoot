@@ -38,6 +38,21 @@ export default {
       const { private: isPrivate } = this.message;
       return isPrivate;
     },
+    isFromFbPageUi() {
+      // Eltafouk: outgoing relay messages tagged by n8n WF1 / backfill —
+      // the page replied directly on FB/IG UI instead of via Chatwoot.
+      const ca = this.message?.content_attributes;
+      // content_attributes may be a json string scalar or a parsed object
+      // depending on the codepath that wrote it; handle both shapes.
+      if (typeof ca === 'string') {
+        try {
+          return JSON.parse(ca)?.external_source === 'fb_page_ui';
+        } catch (e) {
+          return false;
+        }
+      }
+      return ca?.external_source === 'fb_page_ui';
+    },
     parsedLastMessage() {
       const { content_attributes: contentAttributes } = this.message;
       const { email: { subject } = {} } = contentAttributes || {};
@@ -80,6 +95,12 @@ export default {
     tickColor() {
       if (this.isRead) return '#53bdeb';
       return '#8696a0';
+    },
+    fbPageUiLabel() {
+      return '↩ من الصفحة';
+    },
+    fbPageUiTooltip() {
+      return 'هذا الرد أُرسل من واجهة فيسبوك/انستجرام مباشرة، وليس من Chatwoot';
     },
   },
 };
@@ -168,6 +189,13 @@ export default {
         icon="info"
       />
     </template>
+    <span
+      v-if="isFromFbPageUi"
+      :title="fbPageUiTooltip"
+      class="inline-flex items-center align-middle gap-0.5 rounded-md bg-[#1877F2]/10 px-1 py-px ltr:mr-1 rtl:ml-1 text-[9px] font-semibold leading-none text-[#1877F2]"
+    >
+      {{ fbPageUiLabel }}
+    </span>
     <span v-if="message.content && isMessageSticker">
       <fluent-icon
         size="16"
