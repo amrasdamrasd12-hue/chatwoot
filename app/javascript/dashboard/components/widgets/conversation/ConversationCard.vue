@@ -131,6 +131,23 @@ const formattedPhoneNumber = computed(() => {
   return null;
 });
 
+// Eltafouk: when a comment thread has a reply from someone other than the
+// conversation's contact (the OP), surface that latest commenter as the
+// primary title and demote the OP to a sub-text "رد على {OP}". n8n WF1
+// formats reply content as "[رد من {name}]: {body}" so we parse that
+// prefix off the last incoming message. Only applies to comment cards;
+// DM cards use the default contact-name title untouched.
+const latestCommenter = computed(() => {
+  const lastMsg = lastMessageInChat.value;
+  if (!lastMsg || lastMsg.message_type !== 0) return null; // incoming only
+  const content = String(lastMsg.content || '');
+  const match = content.match(/^\[رد من\s+([^\]]+)\]\s*:/);
+  if (!match) return null;
+  const name = match[1].trim();
+  if (!name || name === currentContact.value?.name) return null;
+  return name;
+});
+
 // Eltafouk: source platform/page badge shown above the contact name for comment inboxes.
 const ELTAFOUK_FB_PAGES = {
   111233573822014: 'التفوق للثانوية العامة',
@@ -429,17 +446,24 @@ const deleteConversation = () => {
             {{ formattedPhoneNumber }}
           </span>
         </div>
-        <h4
-          v-else
-          class="conversation--user text-sm capitalize text-ellipsis overflow-hidden whitespace-nowrap min-w-0"
-          :class="
-            hasUnread
-              ? 'font-bold text-n-slate-12'
-              : 'font-medium text-n-slate-12'
-          "
-        >
-          {{ currentContact.name }}
-        </h4>
+        <div v-else class="min-w-0 flex-1">
+          <h4
+            class="conversation--user text-sm capitalize text-ellipsis overflow-hidden whitespace-nowrap min-w-0 leading-tight"
+            :class="
+              hasUnread
+                ? 'font-bold text-n-slate-12'
+                : 'font-medium text-n-slate-12'
+            "
+          >
+            {{ latestCommenter || currentContact.name }}
+          </h4>
+          <div
+            v-if="latestCommenter"
+            class="text-[11px] leading-tight text-n-slate-10 truncate mt-px"
+          >
+            {{ `رد على ${currentContact.name}` }}
+          </div>
+        </div>
       </div>
       <VoiceCallStatus
         v-if="voiceCallData.status"

@@ -43,8 +43,12 @@ export default {
       const { email: { subject } = {} } = contentAttributes || {};
       const raw = this.getPlainText(subject || this.message.content);
       // Eltafouk: strip the '📎 البوست: <url>' suffix that n8n appends to comment messages.
+      // Also strip the '[رد من <name>]:' prefix on nested-reply messages — the
+      // commenter's name is already surfaced as the card's title in
+      // ConversationCard, so repeating it in the preview is noise.
       return raw
         .replace(/\s*[\u{1F4CE}\u{1F517}]\s*البوست:[\s\S]*$/u, '')
+        .replace(/^\[رد من\s+[^\]]+\]\s*:\s*/u, '')
         .trim();
     },
     lastMessageFileType() {
