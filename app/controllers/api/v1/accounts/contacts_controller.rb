@@ -24,10 +24,19 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
   def search
     render json: { error: 'Specify search string with parameter q' }, status: :unprocessable_entity if params[:q].blank? && return
 
-    contacts = Current.account.contacts.where(
-      'name ILIKE :search OR email ILIKE :search OR phone_number ILIKE :search OR contacts.identifier LIKE :search',
-      search: "%#{params[:q].strip}%"
-    )
+    # Eltafouk: also resolve contacts by their per-inbox source_id. Messenger
+    # contacts created via FB webhooks leave contacts.identifier empty but
+    # store the PSID on contact_inboxes.source_id — without this OR the
+    # dashboard panel can't link a public comment author to their DM thread.
+    q = params[:q].strip
+    contacts = Current.account.contacts
+                      .left_joins(:contact_inboxes)
+                      .where(
+                        'contacts.name ILIKE :s OR contacts.email ILIKE :s OR contacts.phone_number ILIKE :s OR contacts.identifier LIKE :s OR contact_inboxes.source_id = :exact',
+                        s: "%#{q}%",
+                        exact: q
+                      )
+                      .distinct
     @contacts = fetch_contacts_with_has_more(contacts)
   end
 
