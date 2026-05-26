@@ -184,8 +184,18 @@ useEmitter('fetch_inbox_unattended_counts', () => {
 
 const getInboxCount = inbox => getInboxUnattendedCount.value(inbox.id);
 
+// Eltafouk: per-page comment inboxes get their own sidebar section ("التعليقات")
+// modeled after the DMs ("المحادثات") layout. Update these constants if a new
+// page is added or folder IDs change.
+const COMMENT_INBOX_IDS = [24, 25, 26, 27];
+const ALL_COMMENTS_FOLDER_ID = 2;
+const COMMENT_UNASSIGNED_FOLDER_ID = 3;
+const COMMENT_UNREPLIED_FOLDER_ID = 4;
+
 const channelsUnreadTotal = computed(() =>
-  inboxes.value.reduce((total, inbox) => total + getInboxCount(inbox), 0)
+  inboxes.value
+    .filter(inbox => !COMMENT_INBOX_IDS.includes(inbox.id))
+    .reduce((total, inbox) => total + getInboxCount(inbox), 0)
 );
 
 const sortedInboxes = computed(() =>
@@ -193,6 +203,16 @@ const sortedInboxes = computed(() =>
     const countDifference = getInboxCount(b) - getInboxCount(a);
     return countDifference || a.name.localeCompare(b.name);
   })
+);
+
+const commentInboxes = computed(() =>
+  sortedInboxes.value.filter(i => COMMENT_INBOX_IDS.includes(i.id))
+);
+const nonCommentInboxes = computed(() =>
+  sortedInboxes.value.filter(i => !COMMENT_INBOX_IDS.includes(i.id))
+);
+const commentsUnreadTotal = computed(() =>
+  commentInboxes.value.reduce((total, inbox) => total + getInboxCount(inbox), 0)
 );
 
 const closeMobileSidebar = () => {
@@ -301,7 +321,7 @@ const menuItems = computed(() => {
           label: t('SIDEBAR.CHANNELS'),
           icon: 'i-lucide-mailbox',
           activeOn: ['conversation_through_inbox'],
-          children: sortedInboxes.value.map(inbox => ({
+          children: nonCommentInboxes.value.map(inbox => ({
             name: `${inbox.name}-${inbox.id}`,
             label: inbox.name,
             icon: h(ChannelIcon, { inbox, class: 'size-[12px]' }),
@@ -330,6 +350,64 @@ const menuItems = computed(() => {
             to: accountScopedRoute('label_conversations', {
               label: label.title,
             }),
+          })),
+        },
+      ],
+    },
+    {
+      name: 'Comments',
+      label: 'التعليقات',
+      icon: 'i-lucide-message-square',
+      count: commentsUnreadTotal.value,
+      showAlert: commentsUnreadTotal.value > 0,
+      children: [
+        {
+          name: 'AllComments',
+          label: 'جميع قنوات التعليقات',
+          activeOn: ['conversations_through_folders'],
+          to: accountScopedRoute('folder_conversations', {
+            id: ALL_COMMENTS_FOLDER_ID,
+          }),
+        },
+        {
+          name: 'CommentMentions',
+          label: 'الإشارات',
+          activeOn: ['conversation_through_mentions'],
+          to: accountScopedRoute('conversation_mentions'),
+        },
+        {
+          name: 'CommentUnassigned',
+          label: 'غير معيّن',
+          activeOn: ['conversations_through_folders'],
+          to: accountScopedRoute('folder_conversations', {
+            id: COMMENT_UNASSIGNED_FOLDER_ID,
+          }),
+        },
+        {
+          name: 'CommentUnreplied',
+          label: 'بدون رد',
+          activeOn: ['conversations_through_folders'],
+          to: accountScopedRoute('folder_conversations', {
+            id: COMMENT_UNREPLIED_FOLDER_ID,
+          }),
+        },
+        {
+          name: 'CommentChannels',
+          label: 'قنوات التعليقات',
+          icon: 'i-lucide-mailbox',
+          activeOn: ['conversation_through_inbox'],
+          children: commentInboxes.value.map(inbox => ({
+            name: `${inbox.name}-${inbox.id}`,
+            label: inbox.name,
+            icon: h(ChannelIcon, { inbox, class: 'size-[12px]' }),
+            to: accountScopedRoute('inbox_dashboard', { inbox_id: inbox.id }),
+            showAlert: getInboxUnattendedCount.value(inbox.id) > 0,
+            component: leafProps =>
+              h(ChannelLeaf, {
+                label: leafProps.label,
+                active: leafProps.active,
+                inbox,
+              }),
           })),
         },
       ],
