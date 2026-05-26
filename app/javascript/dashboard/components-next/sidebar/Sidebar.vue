@@ -191,6 +191,11 @@ const COMMENT_INBOX_IDS = [24, 25, 26, 27];
 const ALL_COMMENTS_FOLDER_ID = 2;
 const COMMENT_UNASSIGNED_FOLDER_ID = 3;
 const COMMENT_UNREPLIED_FOLDER_ID = 4;
+const COMMENT_FOLDER_IDS = [
+  ALL_COMMENTS_FOLDER_ID,
+  COMMENT_UNASSIGNED_FOLDER_ID,
+  COMMENT_UNREPLIED_FOLDER_ID,
+];
 
 const channelsUnreadTotal = computed(() =>
   inboxes.value
@@ -213,6 +218,11 @@ const nonCommentInboxes = computed(() =>
 );
 const commentsUnreadTotal = computed(() =>
   commentInboxes.value.reduce((total, inbox) => total + getInboxCount(inbox), 0)
+);
+const nonCommentFolders = computed(() =>
+  conversationCustomViews.value.filter(
+    view => !COMMENT_FOLDER_IDS.includes(view.id)
+  )
 );
 
 const closeMobileSidebar = () => {
@@ -299,7 +309,7 @@ const menuItems = computed(() => {
           label: t('SIDEBAR.CUSTOM_VIEWS_FOLDER'),
           icon: 'i-lucide-folder',
           activeOn: ['conversations_through_folders'],
-          children: conversationCustomViews.value.map(view => ({
+          children: nonCommentFolders.value.map(view => ({
             name: `${view.name}-${view.id}`,
             label: view.name,
             to: accountScopedRoute('folder_conversations', { id: view.id }),
