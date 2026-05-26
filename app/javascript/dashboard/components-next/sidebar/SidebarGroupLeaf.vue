@@ -33,9 +33,10 @@ const shouldRenderComponent = computed(() => {
       :is="to ? 'router-link' : 'div'"
       :to="to"
       :title="label"
-      class="flex h-8 items-center gap-2 px-2 py-1 rounded-lg hover:bg-gradient-to-r from-transparent via-n-slate-3/70 to-n-slate-3/70 group min-w-0"
+      class="relative flex h-8 items-center gap-2 px-2 py-1 rounded-lg hover:bg-n-slate-3/60 group min-w-0 transition-colors before:content-[''] before:absolute before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-full before:opacity-0 before:bg-n-slate-12 ltr:before:left-0 rtl:before:right-0"
       :class="{
-        'text-n-slate-12 bg-n-alpha-2 active': active,
+        'text-n-slate-12 bg-n-alpha-2 font-medium active before:opacity-100':
+          active,
       }"
     >
       <component

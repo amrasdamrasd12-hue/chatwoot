@@ -21,19 +21,23 @@ const countLabel = computed(() => (props.count > 99 ? '99+' : props.count));
 </script>
 
 <template>
-  <div
-    class="flex items-center gap-2 px-2 py-1.5 rounded-lg h-8 text-n-slate-10 select-none pointer-events-none"
-  >
-    <Icon v-if="icon" :icon="icon" class="size-4" />
-    <span class="text-sm font-medium leading-5 flex-grow min-w-0 truncate">
-      {{ label }}
-    </span>
-    <span
-      v-if="count"
-      dir="ltr"
-      class="inline-flex h-5 min-w-5 flex-shrink-0 items-center justify-center rounded-md bg-n-ruby-9/20 px-1.5 text-[11px] font-semibold leading-none text-n-ruby-11 ring-1 ring-n-ruby-8/50 tabular-nums"
+  <div class="px-2 pt-3 pb-1 select-none pointer-events-none">
+    <div
+      class="flex items-center gap-1.5 text-n-slate-9 border-t border-n-slate-4/60 pt-2"
     >
-      {{ countLabel }}
-    </span>
+      <Icon v-if="icon" :icon="icon" class="size-3 opacity-70" />
+      <span
+        class="text-[10px] font-semibold leading-none flex-grow min-w-0 truncate tracking-[0.08em] uppercase"
+      >
+        {{ label }}
+      </span>
+      <span
+        v-if="count"
+        dir="ltr"
+        class="inline-flex h-[16px] min-w-[16px] flex-shrink-0 items-center justify-center rounded bg-n-ruby-9/15 px-1 text-[10px] font-semibold leading-none text-n-ruby-11 tabular-nums"
+      >
+        {{ countLabel }}
+      </span>
+    </div>
   </div>
 </template>

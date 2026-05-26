@@ -44,13 +44,26 @@ const ELTAFOUK_COMMENT_TINTS = {
   27: '#E1306C', // IG · eltafouk_book
 };
 
+const commentTint = computed(() => ELTAFOUK_COMMENT_TINTS[props.inbox.id]);
+const isCommentInbox = computed(() => Boolean(commentTint.value));
+
+// Tinted rounded-square container for comment inboxes — gives each page a
+// branded "avatar" feel instead of the generic gray circle that DM channels
+// keep.
+const commentIconContainerStyle = computed(() => {
+  if (!commentTint.value) return null;
+  return {
+    backgroundColor: `${commentTint.value}1F`, // ~12% alpha
+    boxShadow: `inset 0 0 0 1px ${commentTint.value}33`,
+  };
+});
+
 const channelColor = computed(() => {
   const type = props.inbox.channel_type;
   const medium = props.inbox.medium;
 
-  const commentTint = ELTAFOUK_COMMENT_TINTS[props.inbox.id];
-  if (commentTint) {
-    return `color: ${commentTint};`;
+  if (commentTint.value) {
+    return `color: ${commentTint.value};`;
   }
 
   if (
@@ -79,8 +92,20 @@ const channelColor = computed(() => {
 </script>
 
 <template>
-  <span class="size-5 grid place-content-center rounded-full bg-n-alpha-2">
-    <ChannelIcon :inbox="inbox" class="size-3" :style="channelColor" />
+  <span
+    class="grid place-content-center transition-colors"
+    :class="[
+      isCommentInbox
+        ? 'size-6 rounded-[6px]'
+        : 'size-5 rounded-full bg-n-alpha-2',
+    ]"
+    :style="commentIconContainerStyle"
+  >
+    <ChannelIcon
+      :inbox="inbox"
+      :class="isCommentInbox ? 'size-3.5' : 'size-3'"
+      :style="channelColor"
+    />
   </span>
   <div
     class="flex-1 truncate min-w-0 transition-colors duration-300"
