@@ -179,6 +179,17 @@ const commentSourceBadgeStyle = computed(() => {
   };
 });
 
+// Eltafouk: when the iframe panel detects the original comment was removed on
+// FB/IG it stamps `custom_attributes.comment_deleted_at`. The card then shows
+// a red pill and suppresses the unread badge (the convo is moot).
+const isCommentDeleted = computed(() => {
+  const ca =
+    props.chat?.custom_attributes || props.chat?.customAttributes || {};
+  return Boolean(ca.comment_deleted_at);
+});
+const commentDeletedLabel = 'تم مسحه';
+const commentDeletedTitle = 'قام المستخدم بمسح الكومنت على فيسبوك / انستجرام';
+
 const showInboxName = computed(() => {
   // Eltafouk: when our colored platform/page pill (commentSourceInfo) renders,
   // suppress Chatwoot's default InboxName badge so the same page name isn't
@@ -397,8 +408,12 @@ const deleteConversation = () => {
           <PriorityMark :priority="chat.priority" class="flex-shrink-0" />
         </div>
       </div>
-      <div v-if="commentSourceInfo" class="mx-2 mt-1 flex items-center min-w-0">
+      <div
+        v-if="commentSourceInfo || isCommentDeleted"
+        class="mx-2 mt-1 flex items-center min-w-0 gap-1.5"
+      >
         <div
+          v-if="commentSourceInfo"
           class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-medium leading-none min-w-0 max-w-full"
           :style="commentSourceBadgeStyle"
         >
@@ -426,6 +441,14 @@ const deleteConversation = () => {
           </svg>
           <span class="truncate">{{ commentSourceInfo.label }}</span>
         </div>
+        <span
+          v-if="isCommentDeleted"
+          class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-medium leading-none flex-shrink-0 bg-[#FEE2E2] text-[#B91C1C] dark:bg-[#7F1D1D]/40 dark:text-[#FCA5A5]"
+          :title="commentDeletedTitle"
+        >
+          <fluent-icon icon="dismiss-circle" size="12" />
+          <span>{{ commentDeletedLabel }}</span>
+        </span>
       </div>
       <div
         class="flex items-center my-0 mx-2 pt-0.5 flex-1 min-w-0 ltr:pr-16 rtl:pl-16"
@@ -510,7 +533,7 @@ const deleteConversation = () => {
         </span>
         <span
           class="shadow-lg rounded-full text-xxs font-bold h-[18px] leading-[18px] ltr:ml-auto rtl:mr-auto mt-1 min-w-[18px] px-1.5 py-0 text-center text-white bg-[#25D366]"
-          :class="hasUnread ? 'block' : 'hidden'"
+          :class="hasUnread && !isCommentDeleted ? 'block' : 'hidden'"
         >
           {{ unreadCount > 9 ? '9+' : unreadCount }}
         </span>
