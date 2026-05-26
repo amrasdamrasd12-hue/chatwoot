@@ -38,20 +38,32 @@ export default {
       const { private: isPrivate } = this.message;
       return isPrivate;
     },
+    parsedContentAttributes() {
+      // content_attributes may be a json string scalar or a parsed object
+      // depending on the codepath that wrote it; normalize both shapes.
+      const ca = this.message?.content_attributes;
+      if (typeof ca === 'string') {
+        try {
+          return JSON.parse(ca) || {};
+        } catch (e) {
+          return {};
+        }
+      }
+      return ca || {};
+    },
     isFromFbPageUi() {
       // Eltafouk: outgoing relay messages tagged by n8n WF1 / backfill —
       // the page replied directly on FB/IG UI instead of via Chatwoot.
-      const ca = this.message?.content_attributes;
-      // content_attributes may be a json string scalar or a parsed object
-      // depending on the codepath that wrote it; handle both shapes.
-      if (typeof ca === 'string') {
-        try {
-          return JSON.parse(ca)?.external_source === 'fb_page_ui';
-        } catch (e) {
-          return false;
-        }
-      }
-      return ca?.external_source === 'fb_page_ui';
+      return this.parsedContentAttributes.external_source === 'fb_page_ui';
+    },
+    eltafoukAgentName() {
+      // Eltafouk: when the panel's public_comment action authored this
+      // outgoing message, we backfill the Chatwoot agent's name into
+      // content_attributes (via /_mkt/messages/attribute_outgoing). Used by
+      // the label to render "↩ من <agent>" instead of the generic
+      // "↩ من الصفحة" — same information the iframe panel already shows.
+      const name = this.parsedContentAttributes.eltafouk_agent_name;
+      return typeof name === 'string' && name.length > 0 ? name : null;
     },
     parsedLastMessage() {
       const { content_attributes: contentAttributes } = this.message;
@@ -97,10 +109,14 @@ export default {
       return '#8696a0';
     },
     fbPageUiLabel() {
-      return '↩ من الصفحة';
+      return this.eltafoukAgentName
+        ? `↩ من ${this.eltafoukAgentName}`
+        : '↩ من الصفحة';
     },
     fbPageUiTooltip() {
-      return 'هذا الرد أُرسل من واجهة فيسبوك/انستجرام مباشرة، وليس من Chatwoot';
+      return this.eltafoukAgentName
+        ? `أرسله ${this.eltafoukAgentName} من Chatwoot`
+        : 'هذا الرد أُرسل من واجهة فيسبوك/انستجرام مباشرة، وليس من Chatwoot';
     },
   },
 };
