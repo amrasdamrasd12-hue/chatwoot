@@ -74,10 +74,16 @@ const toggleShortcutModalFn = show => {
 
 useSidebarKeyboardShortcuts(toggleShortcutModalFn);
 
-const expandedItem = ref(null);
+// Eltafouk: allow multiple top-level sections expanded at the same time
+// (e.g. المحادثات + التعليقات together). expandedItem now holds a Set of
+// section names; toggle membership instead of replacing a single value.
+const expandedItem = ref(new Set());
 
 const setExpandedItem = name => {
-  expandedItem.value = expandedItem.value === name ? null : name;
+  const next = new Set(expandedItem.value);
+  if (next.has(name)) next.delete(name);
+  else next.add(name);
+  expandedItem.value = next;
 };
 
 const {
