@@ -769,9 +769,20 @@ function onKeydown(event) {
   }
 }
 
+// NodeView that adds dir="auto" to every paragraph so the browser's
+// bidi algorithm runs per-paragraph instead of inheriting the document
+// direction. Without this, paragraphs that start with neutral characters
+// (digits, punctuation) default to LTR even inside an RTL interface.
+function makeParagraphNodeView() {
+  const dom = document.createElement('p');
+  dom.setAttribute('dir', 'auto');
+  return { dom, contentDOM: dom };
+}
+
 function createEditorView() {
   editorView = new EditorView(editor.value, {
     state: state,
+    nodeViews: { paragraph: makeParagraphNodeView },
     editable: () => !props.disabled,
     dispatchTransaction: tx => {
       state = state.apply(tx);
