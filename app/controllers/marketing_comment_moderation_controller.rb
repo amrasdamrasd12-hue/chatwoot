@@ -12,7 +12,11 @@ class MarketingCommentModerationController < ActionController::API
   # Body:
   #   conversation_id  — Chatwoot conv id to update
   #   comment_id       — FB comment id (just for logging / traceability)
-  #   action           — 'hide' | 'unhide' | 'delete'
+  #   kind             — 'hide' | 'unhide' | 'delete'
+  #                      (named `kind` and not `action` because Rails routing
+  #                      reserves params[:action] for the controller method
+  #                      name — sending `action` here got silently shadowed
+  #                      and every call returned 400 invalid_action)
   #   actor_name       — display name of the Chatwoot agent who acted
   #   reason_text      — agent's reason (presets or free text). NULL on unhide.
   def update_state
@@ -21,9 +25,9 @@ class MarketingCommentModerationController < ActionController::API
     return render(json: { ok: false, error: 'unauthorized' }, status: :unauthorized) if expected.empty? || secret != expected
 
     conv_id = params[:conversation_id].to_i
-    action_kind = params[:action].to_s
+    action_kind = params[:kind].to_s
     return render(json: { ok: false, error: 'missing_params' }, status: :bad_request) if conv_id.zero?
-    return render(json: { ok: false, error: 'invalid_action' }, status: :bad_request) unless %w[hide unhide delete].include?(action_kind)
+    return render(json: { ok: false, error: 'invalid_kind' }, status: :bad_request) unless %w[hide unhide delete].include?(action_kind)
 
     conv = Conversation.find_by(id: conv_id)
     return render(json: { ok: true, found: false }) if conv.nil?
