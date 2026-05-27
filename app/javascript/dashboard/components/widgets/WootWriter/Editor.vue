@@ -710,26 +710,24 @@ function getEditorPlainText() {
 function replaceExprWithResult(expr, result) {
   if (!editorView) return;
   const editorState = editorView.state;
-  const text = editorState.doc.textContent;
+  const { doc } = editorState;
   const target = `${expr}=`;
-  const idx = text.lastIndexOf(target);
-  if (idx === -1) return;
-  let charOffset = 0;
   let fromPos = null;
   let toPos = null;
-  editorState.doc.descendants((node, pos) => {
+
+  // Walk every text node; `pos` is the ProseMirror absolute position of the
+  // start of that text node (already accounts for block-open tokens).
+  doc.descendants((node, pos) => {
     if (fromPos !== null) return false;
-    if (node.isText) {
-      const start = charOffset;
-      const end = charOffset + node.text.length;
-      if (idx >= start && idx + target.length <= end) {
-        fromPos = pos + (idx - start);
-        toPos = pos + (idx - start) + target.length;
-      }
-      charOffset = end;
+    if (!node.isText) return true;
+    const idx = node.text.lastIndexOf(target);
+    if (idx !== -1) {
+      fromPos = pos + idx;
+      toPos = pos + idx + target.length;
     }
     return true;
   });
+
   if (fromPos === null) return;
   const tr = editorState.tr.replaceWith(
     fromPos,
@@ -763,9 +761,13 @@ function onKeydown(event) {
   if (isCmdPlusEnterToSendEnabled()) {
     handleLineBreakWhenCmdAndEnterToSendEnabled(event);
   }
-  // Dismiss chip on Escape
-  if (event.key === 'Escape' && calcChip.value) {
-    dismissCalcChip();
+  if (calcChip.value) {
+    if (event.key === 'Escape') {
+      dismissCalcChip();
+    } else if (event.key === 'Tab') {
+      event.preventDefault();
+      acceptCalcChip();
+    }
   }
 }
 
@@ -1021,10 +1023,19 @@ useEmitter(BUS_EVENTS.INSERT_INTO_RICH_EDITOR, insertContentIntoEditor);
 
   > .ProseMirror {
     @apply p-0 break-words text-n-slate-12;
-    direction: auto;
 
     p {
       unicode-bidi: plaintext;
+    }
+
+    p[dir='rtl'] {
+      direction: rtl;
+      text-align: right;
+    }
+
+    p[dir='ltr'] {
+      direction: ltr;
+      text-align: left;
     }
 
     h1,
