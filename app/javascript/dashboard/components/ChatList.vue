@@ -1007,20 +1007,23 @@ watch(conversationFilters, (newVal, oldVal) => {
            without bouncing the layout. -->
       <button
         type="button"
-        class="group/unread relative inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full text-[11px] font-semibold transition-all duration-200 ease-out ring-1 active:scale-[0.97]"
+        class="group/unread relative inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-full text-[10px] font-semibold transition-all duration-200 ease-out ring-1 active:scale-[0.97]"
         :class="[
           showUnreadOnly
-            ? 'bg-n-slate-12 text-white ring-n-slate-12 shadow-[0_2px_8px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.18)] ps-2.5 pe-1'
-            : 'bg-white text-n-slate-12 ring-n-alpha-2 hover:ring-n-slate-7 hover:bg-n-alpha-1 shadow-sm ps-2.5 pe-1',
-          unreadCountInCurrentView === 0 ? 'pe-2.5' : '',
+            ? 'bg-n-slate-12 text-white ring-n-slate-12 shadow-[0_2px_8px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.18)] ps-2 pe-1.5'
+            : 'bg-white text-n-slate-12 ring-n-alpha-2 hover:ring-n-slate-7 hover:bg-n-alpha-1 shadow-sm ps-2 pe-1.5',
+          unreadCountInCurrentView === 0 ? 'pe-2' : '',
         ]"
         @click="showUnreadOnly = !showUnreadOnly"
       >
-        <fluent-icon icon="mail-unread" size="12" />
+        <fluent-icon icon="mail-unread" size="10" />
         <span>{{ $t('CHAT_LIST.UNREAD') }}</span>
+        <!-- Badge sits left-of-text in RTL. width is content-driven with a
+             generous min so 3-digit counts (the common case here) never
+             clip into the parent's rounded-full curve. -->
         <span
           v-if="unreadCountInCurrentView > 0"
-          class="inline-flex h-5 min-w-[22px] items-center justify-center rounded-full bg-[#DC2626] px-1.5 text-[11px] font-bold leading-none tabular-nums text-white animate-unread-glow ring-1 ring-inset ring-white/10"
+          class="inline-flex h-[18px] min-w-[26px] items-center justify-center rounded-full bg-[#DC2626] px-1.5 text-[10px] font-bold leading-none tabular-nums text-white animate-unread-glow ring-1 ring-inset ring-white/10"
         >
           {{ unreadCountInCurrentView }}
         </span>
