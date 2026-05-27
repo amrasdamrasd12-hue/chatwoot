@@ -446,5 +446,9 @@
   },
   "GALLERY_VIEW": {
     "ERROR_DOWNLOADING": "Unable to download attachment. Please try again"
+  },
+  "CALC_CHIP": {
+    "EQUALS_PREFIX": "= ",
+    "ACCEPT": "Use"
   }
 }

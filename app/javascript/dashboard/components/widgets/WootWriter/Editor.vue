@@ -17,6 +17,8 @@ import TagAgents from '../conversation/TagAgents.vue';
 import VariableList from '../conversation/VariableList.vue';
 import TagTools from '../conversation/TagTools.vue';
 import CopilotMenuBar from './CopilotMenuBar.vue';
+import CalcChip from './CalcChip.vue';
+import { detectCalcExpression } from './utils/mathEvaluator';
 
 import { useEmitter } from 'dashboard/composables/emitter';
 import { useI18n } from 'vue-i18n';
@@ -196,6 +198,9 @@ const selectedImageNode = ref(null);
 const isTextSelected = ref(false); // Tracks text selection and prevents unnecessary re-renders on mouse selection
 const showSelectionMenu = ref(false);
 const sizes = MESSAGE_EDITOR_IMAGE_RESIZES;
+
+// Calculator chip state
+const calcChip = ref(null); // { expr: string, result: string } | null
 
 // element ref
 const editorRoot = useTemplateRef('editorRoot');
@@ -697,12 +702,70 @@ function handleLineBreakWhenCmdAndEnterToSendEnabled(event) {
   }
 }
 
+function getEditorPlainText() {
+  if (!editorView) return '';
+  return editorView.state.doc.textContent;
+}
+
+function replaceExprWithResult(expr, result) {
+  if (!editorView) return;
+  const editorState = editorView.state;
+  const text = editorState.doc.textContent;
+  const target = `${expr}=`;
+  const idx = text.lastIndexOf(target);
+  if (idx === -1) return;
+  let charOffset = 0;
+  let fromPos = null;
+  let toPos = null;
+  editorState.doc.descendants((node, pos) => {
+    if (fromPos !== null) return false;
+    if (node.isText) {
+      const start = charOffset;
+      const end = charOffset + node.text.length;
+      if (idx >= start && idx + target.length <= end) {
+        fromPos = pos + (idx - start);
+        toPos = pos + (idx - start) + target.length;
+      }
+      charOffset = end;
+    }
+    return true;
+  });
+  if (fromPos === null) return;
+  const tr = editorState.tr.replaceWith(
+    fromPos,
+    toPos,
+    editorState.schema.text(result)
+  );
+  editorView.dispatch(tr);
+}
+
+function dismissCalcChip() {
+  calcChip.value = null;
+}
+
+function acceptCalcChip() {
+  if (!calcChip.value) return;
+  const { expr, result } = calcChip.value;
+  replaceExprWithResult(expr, result);
+  calcChip.value = null;
+}
+
+function checkCalcExpression() {
+  const text = getEditorPlainText();
+  const detected = detectCalcExpression(text);
+  calcChip.value = detected;
+}
+
 function onKeydown(event) {
   if (isEnterToSendEnabled()) {
     handleLineBreakWhenEnterToSendEnabled(event);
   }
   if (isCmdPlusEnterToSendEnabled()) {
     handleLineBreakWhenCmdAndEnterToSendEnabled(event);
+  }
+  // Dismiss chip on Escape
+  if (event.key === 'Escape' && calcChip.value) {
+    dismissCalcChip();
   }
 }
 
@@ -715,6 +778,7 @@ function createEditorView() {
       editorView.updateState(state);
       if (tx.docChanged) {
         emitOnChange();
+        checkCalcExpression();
       }
       checkSelection(state);
     },
@@ -876,6 +940,13 @@ useEmitter(BUS_EVENTS.INSERT_INTO_RICH_EDITOR, insertContentIntoEditor);
       accept="image/png, image/jpeg, image/jpg, image/gif, image/webp"
       hidden
       @change="onFileChange"
+    />
+    <CalcChip
+      v-if="calcChip"
+      :result="calcChip.result"
+      class="mx-2 mb-1"
+      @accept="acceptCalcChip"
+      @dismiss="dismissCalcChip"
     />
     <div ref="editor" dir="auto" />
     <div
