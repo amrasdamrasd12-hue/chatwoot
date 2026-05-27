@@ -7,9 +7,49 @@ import TranslationToggle from 'dashboard/components-next/message/TranslationTogg
 import { MESSAGE_TYPES } from '../../constants';
 import { useMessageContext } from '../../provider.js';
 import { useTranslations } from 'dashboard/composables/useTranslations';
+import { useMapGetter } from 'dashboard/composables/store';
 
 const { content, attachments, contentAttributes, messageType } =
   useMessageContext();
+
+const accountId = useMapGetter('getCurrentAccountId');
+
+// Eltafouk: when the panel mirrored a DM that was sent as a private reply
+// to a specific FB comment, it stamps the comment context onto
+// content_attributes (see chatwoot-mirror.ts). Render an FB-style quoted
+// reply block above the message so agents know which comment this DM
+// answered, with a one-click jump back to the comment conversation.
+const replyToComment = computed(() => {
+  const ca = contentAttributes.value || {};
+  const commentText = ca.eltafouk_reply_to_comment_text;
+  if (!commentText || typeof commentText !== 'string') return null;
+  return {
+    text: commentText,
+    convId: ca.eltafouk_reply_to_comment_conv_id || null,
+    commenterName:
+      typeof ca.eltafouk_reply_to_commenter_name === 'string'
+        ? ca.eltafouk_reply_to_commenter_name
+        : null,
+  };
+});
+
+const replyToCommentHref = computed(() => {
+  const r = replyToComment.value;
+  if (!r?.convId) return null;
+  return `/app/accounts/${accountId.value || 1}/conversations/${r.convId}`;
+});
+
+// Held outside the template so the vue-i18n bare-string rule keeps quiet —
+// the panel is Arabic-only, so plain literals are the right choice.
+const replyToHeading = computed(() => {
+  const r = replyToComment.value;
+  if (!r) return '';
+  return r.commenterName
+    ? `↩ رد على كومنت ${r.commenterName}`
+    : '↩ رد على كومنت العميل';
+});
+const replyToOpenLabel = 'افتح الكومنت ↗';
+const replyToOpenTitle = 'افتح المحادثة الأصلية للكومنت في تبويبة جديدة';
 
 const { hasTranslations, translationContent } =
   useTranslations(contentAttributes);
@@ -44,6 +84,31 @@ const handleSeeOriginal = () => {
 <template>
   <BaseBubble class="px-4 py-3" data-bubble-name="text">
     <div class="gap-3 flex flex-col">
+      <div
+        v-if="replyToComment"
+        class="border-s-[3px] border-n-brand/60 bg-n-alpha-2 dark:bg-n-alpha-3 rounded-md ps-2 pe-2 py-1.5 -mx-1 text-[12px] leading-snug"
+      >
+        <div
+          class="text-[10px] font-semibold uppercase tracking-wide text-n-slate-11 mb-0.5"
+        >
+          {{ replyToHeading }}
+        </div>
+        <div
+          class="text-n-slate-12 line-clamp-3 whitespace-pre-line break-words"
+        >
+          {{ replyToComment.text }}
+        </div>
+        <a
+          v-if="replyToCommentHref"
+          :href="replyToCommentHref"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center gap-0.5 mt-1 text-[11px] font-semibold text-n-brand hover:underline"
+          :title="replyToOpenTitle"
+        >
+          {{ replyToOpenLabel }}
+        </a>
+      </div>
       <span v-if="isEmpty" class="text-n-slate-11">
         {{ $t('CONVERSATION.NO_CONTENT') }}
       </span>
