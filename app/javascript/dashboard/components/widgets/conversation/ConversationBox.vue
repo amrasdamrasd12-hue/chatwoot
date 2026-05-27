@@ -40,18 +40,28 @@ export default {
       dashboardApps: 'dashboardApps/getRecords',
     }),
     dashboardAppTabs() {
-      return [
+      // Eltafouk: dashboard apps are registered account-wide in Chatwoot, so
+      // by default every conversation gets a "سياق الكومنت" tab — even DM
+      // / Messenger threads where the panel just shows an empty state. Hide
+      // the tab entirely on non-comment conversations so the iframe doesn't
+      // load for every Messenger message. Comment convs are detected via
+      // the `comment_id` custom attribute n8n writes when it creates them.
+      const tabs = [
         {
           key: 'messages',
           index: 0,
           name: this.$t('CONVERSATION.DASHBOARD_APP_TAB_MESSAGES'),
         },
-        ...this.dashboardApps.map((dashboardApp, index) => ({
+      ];
+      if (!this.isCommentInbox) return tabs;
+      this.dashboardApps.forEach((dashboardApp, index) => {
+        tabs.push({
           key: `dashboard-${dashboardApp.id}`,
           index: index + 1,
           name: dashboardApp.title,
-        })),
-      ];
+        });
+      });
+      return tabs;
     },
     showContactPanel() {
       return this.isContactPanelOpen && this.currentChat.id;
@@ -130,6 +140,7 @@ export default {
     />
     <woot-tabs
       v-if="
+        isCommentInbox &&
         dashboardApps.length &&
         currentChat.id &&
         !shouldShowFullScreenDashboardApp
@@ -174,15 +185,23 @@ export default {
         />
         <slot />
       </div>
-      <DashboardAppFrame
-        v-for="(dashboardApp, index) in dashboardApps"
-        v-show="activeIndex - 1 === index"
-        :key="currentChat.id + '-' + dashboardApp.id"
-        :is-visible="activeIndex - 1 === index"
-        :config="dashboardApps[index].content"
-        :position="index"
-        :current-chat="currentChat"
-      />
+      <!-- Eltafouk: never mount the iframe on DM/non-comment conversations.
+           Without this gate the iframe is still in the DOM (just hidden via
+           v-show) and would request /app/panel on every Messenger thread —
+           triggering pointless fetches and a "this is not a comment inbox"
+           response. The wrapping <template v-if> sits outside the v-for so
+           Vue's lint rule doesn't flag the v-if/v-for combination. -->
+      <template v-if="isCommentInbox">
+        <DashboardAppFrame
+          v-for="(dashboardApp, index) in dashboardApps"
+          v-show="activeIndex - 1 === index"
+          :key="currentChat.id + '-' + dashboardApp.id"
+          :is-visible="activeIndex - 1 === index"
+          :config="dashboardApps[index].content"
+          :position="index"
+          :current-chat="currentChat"
+        />
+      </template>
     </template>
   </div>
 </template>
