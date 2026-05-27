@@ -128,6 +128,12 @@ const folders = useMapGetter('customViews/getConversationCustomViews');
 const agentList = useMapGetter('agents/getAgents');
 const teamsList = useMapGetter('teams/getTeams');
 const inboxesList = useMapGetter('inboxes/getInboxes');
+// Per-inbox unread total maintained server-side, mirrored to the store via
+// fetchUnattendedCounts. Reading this so the unread-filter pill can show
+// the true total for the current view (not just the slice currently
+// rendered in the virtual list). Matches the count the agent sees on
+// the same inbox in the sidebar.
+const getInboxUnattendedCountFn = useMapGetter('inboxes/getUnattendedCount');
 const campaigns = useMapGetter('campaigns/getAllCampaigns');
 const labels = useMapGetter('labels/getLabels');
 const currentAccountId = useMapGetter('getCurrentAccountId');
@@ -356,19 +362,30 @@ const conversationList = computed(() => {
   return localConversationList;
 });
 
-// Count of unread conversations in whatever list the agent is currently
-// looking at. Drives the badge on the "غير مقروء" filter pill so the
-// agent sees at a glance how many threads are waiting in this view —
-// not the global unread count which lives in the sidebar, and not the
-// post-filter count which would be tautological when the filter is on.
+// Server-truth unread total for whatever scope the agent is viewing,
+// pulled from the same store the sidebar's per-inbox badges read from.
+// This is independent of how much of the list is currently rendered
+// into the virtual scroller — the badge would otherwise undercount
+// dramatically (15 vs the real 166) on long lists.
 //
-// When `showUnreadOnly` is already true, `conversationList` is the
-// unread subset; its length IS the unread count. Otherwise we filter
-// the visible list again so the badge reflects the same view bounds
-// (active assignee tab, active folder/labels) the agent is in.
+// Source ladder, matching the resolution order Chatwoot uses elsewhere:
+//   1. specific inbox  → that inbox's unattendedCount
+//   2. anything else (team / label / folder / "all")
+//                      → sum of unattendedCount across non-comment
+//                        inboxes, which is exactly what the sidebar
+//                        renders next to the "المحادثات" header
+//
+// Team / label / folder scopes don't have first-class unattended
+// getters in the store, so they fall through to the sum. That's a
+// slight overcount for those views; iterate later if it matters.
 const unreadCountInCurrentView = computed(() => {
-  if (showUnreadOnly.value) return conversationList.value.length;
-  return conversationList.value.filter(c => c.unread_count > 0).length;
+  const inboxId = Number(props.conversationInbox || 0);
+  if (inboxId > 0) {
+    return getInboxUnattendedCountFn.value(inboxId);
+  }
+  return inboxesList.value
+    .filter(ib => !ib.is_comment_inbox)
+    .reduce((sum, ib) => sum + getInboxUnattendedCountFn.value(ib.id), 0);
 });
 
 const showEndOfListMessage = computed(() => {
@@ -981,33 +998,29 @@ watch(conversationFilters, (newVal, oldVal) => {
         class="flex-1"
         @chat-tab-change="updateAssigneeTab"
       />
-      <!-- Eltafouk: elevated unread filter. Badge shows the count of
-           unread conversations in the current view, so the agent sees
-           at a glance how big the backlog is even before toggling the
-           filter. The pill itself goes solid Meta-blue on active so it
-           reads as a clearly-pressed state, with a soft ring + drop
-           shadow at rest to lift it off the surrounding tabs. -->
+      <!-- Eltafouk: elevated unread filter. Badge shows the true
+           server-side unread total for the current scope (matches the
+           count the sidebar displays on the same inbox), so the agent
+           sees the real backlog size — not just the slice currently
+           rendered in the virtual list. The count badge is a vivid red
+           pulsing chip when there are unread threads, to call attention
+           without bouncing the layout. -->
       <button
         type="button"
-        class="group/unread relative inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full text-xs font-semibold transition-all duration-200 ease-out ring-1 active:scale-[0.97]"
+        class="group/unread relative inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full text-[11px] font-semibold transition-all duration-200 ease-out ring-1 active:scale-[0.97]"
         :class="[
           showUnreadOnly
-            ? 'bg-[#1877F2] text-white ring-[#1877F2] shadow-[0_2px_8px_rgba(24,119,242,0.3),inset_0_1px_0_rgba(255,255,255,0.2)] ps-2.5 pe-1'
-            : 'bg-white text-n-slate-12 ring-n-alpha-2 hover:ring-[#1877F2]/40 hover:bg-[#1877F2]/[0.03] shadow-sm ps-2.5 pe-1',
+            ? 'bg-n-slate-12 text-white ring-n-slate-12 shadow-[0_2px_8px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.18)] ps-2.5 pe-1'
+            : 'bg-white text-n-slate-12 ring-n-alpha-2 hover:ring-n-slate-7 hover:bg-n-alpha-1 shadow-sm ps-2.5 pe-1',
           unreadCountInCurrentView === 0 ? 'pe-2.5' : '',
         ]"
         @click="showUnreadOnly = !showUnreadOnly"
       >
-        <fluent-icon icon="mail-unread" size="14" />
+        <fluent-icon icon="mail-unread" size="12" />
         <span>{{ $t('CHAT_LIST.UNREAD') }}</span>
         <span
           v-if="unreadCountInCurrentView > 0"
-          class="inline-flex h-5 min-w-[22px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold leading-none tabular-nums transition-colors duration-200"
-          :class="
-            showUnreadOnly
-              ? 'bg-white/25 text-white ring-1 ring-inset ring-white/15'
-              : 'bg-[#1877F2] text-white shadow-[0_1px_3px_rgba(24,119,242,0.4)]'
-          "
+          class="inline-flex h-5 min-w-[22px] items-center justify-center rounded-full bg-[#DC2626] px-1.5 text-[11px] font-bold leading-none tabular-nums text-white animate-unread-glow ring-1 ring-inset ring-white/10"
         >
           {{ unreadCountInCurrentView }}
         </span>

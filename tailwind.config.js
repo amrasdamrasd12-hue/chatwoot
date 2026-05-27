@@ -243,6 +243,17 @@ const tailwindConfig = {
         '50%': { transform: 'translateX(-0.234375rem)' },
         '75%': { transform: 'translateX(0.234375rem)' },
       },
+      // Eltafouk: breathing glow used on the unread-filter badge in the
+      // chat list. Two-layer ring expansion that decays to nothing —
+      // calls attention to the count without bouncing the layout.
+      'unread-glow': {
+        '0%, 100%': {
+          boxShadow: '0 0 0 0 rgba(220, 38, 38, 0.55), 0 1px 3px rgba(220, 38, 38, 0.4)',
+        },
+        '50%': {
+          boxShadow: '0 0 0 6px rgba(220, 38, 38, 0), 0 1px 3px rgba(220, 38, 38, 0.4)',
+        },
+      },
     },
     animation: {
       ...defaultTheme.animation,
@@ -251,6 +262,7 @@ const tailwindConfig = {
       'loader-pulse': 'loader-pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
       'card-select': 'card-select 0.25s ease-in-out',
       shake: 'shake 0.3s ease-in-out 0s 2',
+      'unread-glow': 'unread-glow 2s ease-in-out infinite',
     },
   },
   plugins: [
