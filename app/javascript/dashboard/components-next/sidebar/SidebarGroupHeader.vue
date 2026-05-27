@@ -21,9 +21,10 @@ const emit = defineEmits(['toggle']);
 const showBadge = useMapGetter(props.getterKeys.badge);
 const dynamicCount = useMapGetter(props.getterKeys.count);
 const displayCountValue = computed(() => props.count || dynamicCount.value);
-const displayCount = computed(() =>
-  displayCountValue.value > 99 ? '99+' : displayCountValue.value
-);
+// Eltafouk: show the real number, no 99+ cap. The agent needs the actual
+// backlog size on the comment-inbox channels (volume routinely sits in the
+// 500-3000 range and "99+" hides whether things are getting worse or not).
+const displayCount = computed(() => displayCountValue.value);
 </script>
 
 <template>

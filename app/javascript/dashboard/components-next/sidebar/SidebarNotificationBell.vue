@@ -7,14 +7,12 @@ const emit = defineEmits(['openNotificationPanel']);
 
 const notificationMetadata = useMapGetter('notifications/getMeta');
 const route = useRoute();
+// Eltafouk: surface the actual unread count instead of capping at 99+.
 const unreadCount = computed(() => {
   if (!notificationMetadata.value.unreadCount) {
     return '';
   }
-
-  return notificationMetadata.value.unreadCount < 100
-    ? `${notificationMetadata.value.unreadCount}`
-    : '99+';
+  return `${notificationMetadata.value.unreadCount}`;
 });
 
 function openNotificationPanel() {

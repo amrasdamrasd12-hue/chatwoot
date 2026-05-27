@@ -30,9 +30,8 @@ const unattendedCount = computed(() =>
   getUnattendedCount.value(props.inbox.id)
 );
 
-const countLabel = computed(() =>
-  unattendedCount.value > 99 ? '99+' : unattendedCount.value
-);
+// Eltafouk: show the real per-channel backlog size, no 99+ cap.
+const countLabel = computed(() => unattendedCount.value);
 
 // Eltafouk: per-page comment inboxes (Channel::Api) get platform tints
 // instead of the generic API orange. Keep IDs in sync with the override

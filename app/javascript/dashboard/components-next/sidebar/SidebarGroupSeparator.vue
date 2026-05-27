@@ -17,7 +17,8 @@ const props = defineProps({
   },
 });
 
-const countLabel = computed(() => (props.count > 99 ? '99+' : props.count));
+// Eltafouk: show the actual count, no 99+ cap.
+const countLabel = computed(() => props.count);
 </script>
 
 <template>

@@ -59,7 +59,7 @@ const shouldRenderComponent = computed(() => {
               : 'bg-n-alpha-2 text-n-slate-11 rounded-md h-5 min-w-5 px-1.5 text-[11px]',
           ]"
         >
-          {{ count > 99 ? '99+' : count }}
+          {{ count }}
         </span>
       </template>
     </component>
