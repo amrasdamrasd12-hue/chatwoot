@@ -283,6 +283,18 @@ const conversationListPagination = computed(() => {
 });
 
 const conversationFilters = computed(() => {
+  // When the "غير مقروء" filter pill is pressed, route the request
+  // through the backend's `conversation_type=unattended` filter instead
+  // of relying on a client-side `unread_count > 0` pass over the loaded
+  // slice. With 30k+ conversations on a single inbox, the unread row is
+  // almost never in the first paginated batch, so the local-only filter
+  // returned an empty list even when the badge count said otherwise.
+  // The unattended scope on the backend (first_reply_created_at IS NULL
+  // OR waiting_since IS NOT NULL) is the same metric the sidebar's
+  // unattendedCount derives from, so the badge and the post-filter list
+  // now line up.
+  const effectiveConversationType =
+    props.conversationType || (showUnreadOnly.value ? 'unattended' : undefined);
   return {
     inboxId: props.conversationInbox ? props.conversationInbox : undefined,
     assigneeType: activeAssigneeTab.value,
@@ -291,7 +303,7 @@ const conversationFilters = computed(() => {
     page: conversationListPagination.value,
     labels: props.label ? [props.label] : undefined,
     teamId: props.teamId || undefined,
-    conversationType: props.conversationType || undefined,
+    conversationType: effectiveConversationType,
   };
 });
 
@@ -353,12 +365,15 @@ const conversationList = computed(() => {
     });
   }
 
-  if (showUnreadOnly.value) {
-    localConversationList = localConversationList.filter(
-      conversation => conversation.unread_count > 0
-    );
-  }
-
+  // Note: no local `unread_count > 0` filter here any more. The
+  // showUnreadOnly toggle now flows into conversationFilters as
+  // conversation_type=unattended, which makes the backend return the
+  // right set (and the sidebar/badge count is derived from the same
+  // server-side definition). A second client-side filter would only
+  // *narrow* that set incorrectly — e.g. an unattended conversation
+  // the agent already opened (unread_count=0 but no first reply yet)
+  // would get stripped out and the list would look empty even though
+  // the badge said otherwise.
   return localConversationList;
 });
 
