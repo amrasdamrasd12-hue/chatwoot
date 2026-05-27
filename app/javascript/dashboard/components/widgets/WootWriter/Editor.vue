@@ -777,6 +777,44 @@ function onKeydown(event) {
 // Arabic-Indic digits ١٢٣ which sit in U+0600-U+06FF).
 const ARABIC_RE = /[؀-ۿ]/;
 const LATIN_RE = /[A-Za-zÀ-ɏ]/;
+const ARABIC_INDIC_DIGITS_RE = /[٠-٩]/; // Arabic-Indic digits U+0660-U+0669
+
+// Convert Arabic-Indic digits to English digits to avoid bidi issues.
+// Arabic-Indic digits (٠-٩) cause severe cursor movement and reordering problems
+// because they're classified as weak RTL. Converting them transparently to
+// English digits (0-9) solves the issue without affecting the user experience.
+function fixArabicDigitsBidi(tr) {
+  const arabicToEnglish = {
+    '٠': '0',
+    '١': '1',
+    '٢': '2',
+    '٣': '3',
+    '٤': '4',
+    '٥': '5',
+    '٦': '6',
+    '٧': '7',
+    '٨': '8',
+    '٩': '9',
+  };
+
+  tr.doc.descendants((node, pos) => {
+    if (node.isText && ARABIC_INDIC_DIGITS_RE.test(node.text)) {
+      const newText = node.text
+        .split('')
+        .map(char => arabicToEnglish[char] || char)
+        .join('');
+      if (newText !== node.text) {
+        tr.replaceWith(
+          pos,
+          pos + node.nodeSize,
+          tr.doc.type.schema.text(newText)
+        );
+      }
+    }
+  });
+
+  return tr;
+}
 
 function getParagraphDir(text) {
   for (let i = 0; i < text.length; i += 1) {
@@ -818,6 +856,9 @@ function createEditorView() {
     nodeViews: { paragraph: makeParagraphNodeView },
     editable: () => !props.disabled,
     dispatchTransaction: tx => {
+      // Apply bidi isolation fix for Arabic-Indic digits
+      tx = fixArabicDigitsBidi(tx);
+
       state = state.apply(tx);
       editorView.updateState(state);
       if (tx.docChanged) {
@@ -1056,7 +1097,7 @@ useEmitter(BUS_EVENTS.INSERT_INTO_RICH_EDITOR, insertContentIntoEditor);
     @apply p-0 break-words text-n-slate-12;
 
     p {
-      unicode-bidi: plaintext;
+      unicode-bidi: bidi-override;
     }
 
     p[dir='rtl'] {
