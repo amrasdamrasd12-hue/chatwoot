@@ -179,16 +179,69 @@ const commentSourceBadgeStyle = computed(() => {
   };
 });
 
-// Eltafouk: when the iframe panel detects the original comment was removed on
-// FB/IG it stamps `custom_attributes.comment_deleted_at`. The card then shows
-// a red pill and suppresses the unread badge (the convo is moot).
-const isCommentDeleted = computed(() => {
+// Eltafouk: surface comment moderation state on the card. Three distinct
+// situations, all sourced from the conversation's custom_attributes:
+//   * comment_deleted_at      → the customer themselves removed the
+//                               comment on FB (panel sets this when the
+//                               Graph fetch returns is_deleted=true OR
+//                               when an agent uses the delete action).
+//                               Authored-by populated only when an agent
+//                               did it (via comment_deleted_by).
+//   * comment_hidden_at + by  → an agent hid the comment from the panel.
+//                               Tooltip carries the agent's name and the
+//                               reason text from comment_hidden_reason.
+// Both states mark the conversation read (handled server-side) and the
+// unread count badge below stays suppressed.
+const commentModerationState = computed(() => {
   const ca =
     props.chat?.custom_attributes || props.chat?.customAttributes || {};
-  return Boolean(ca.comment_deleted_at);
+  if (ca.comment_deleted_at) {
+    const by =
+      typeof ca.comment_deleted_by === 'string' ? ca.comment_deleted_by : null;
+    const reason =
+      typeof ca.comment_deleted_reason === 'string'
+        ? ca.comment_deleted_reason
+        : null;
+    // Agent-initiated delete vs customer-side delete: only show the
+    // agent label when we actually have a name. Without `by` we treat
+    // it as the customer-deleted case (preserves prior behavior).
+    return {
+      kind: 'deleted',
+      label: by ? 'تم حذفه' : 'تم مسحه',
+      tooltip: by
+        ? `حذفه ${by}${reason ? `\nالسبب: ${reason}` : ''}`
+        : 'قام المستخدم بمسح الكومنت على فيسبوك / انستجرام',
+      classes:
+        'bg-[#FEE2E2] text-[#B91C1C] dark:bg-[#7F1D1D]/40 dark:text-[#FCA5A5]',
+      icon: 'dismiss-circle',
+    };
+  }
+  if (ca.comment_hidden_at) {
+    const by =
+      typeof ca.comment_hidden_by === 'string' ? ca.comment_hidden_by : null;
+    const reason =
+      typeof ca.comment_hidden_reason === 'string'
+        ? ca.comment_hidden_reason
+        : null;
+    return {
+      kind: 'hidden',
+      label: 'تم إخفاؤه',
+      tooltip: by
+        ? `أخفاه ${by}${reason ? `\nالسبب: ${reason}` : ''}`
+        : 'تم إخفاء التعليق من الصفحة',
+      classes:
+        'bg-[#FEF3C7] text-[#92400E] dark:bg-[#78350F]/40 dark:text-[#FCD34D]',
+      icon: 'eye-off',
+    };
+  }
+  return null;
 });
-const commentDeletedLabel = 'تم مسحه';
-const commentDeletedTitle = 'قام المستخدم بمسح الكومنت على فيسبوك / انستجرام';
+const isCommentModerated = computed(
+  () => commentModerationState.value !== null
+);
+// Back-compat aliases used below in the template — keep the existing
+// names so the diff stays minimal.
+const isCommentDeleted = isCommentModerated;
 
 const showInboxName = computed(() => {
   // Eltafouk: when our colored platform/page pill (commentSourceInfo) renders,
@@ -442,12 +495,13 @@ const deleteConversation = () => {
           <span class="truncate">{{ commentSourceInfo.label }}</span>
         </div>
         <span
-          v-if="isCommentDeleted"
-          class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-medium leading-none flex-shrink-0 bg-[#FEE2E2] text-[#B91C1C] dark:bg-[#7F1D1D]/40 dark:text-[#FCA5A5]"
-          :title="commentDeletedTitle"
+          v-if="commentModerationState"
+          class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-medium leading-none flex-shrink-0"
+          :class="commentModerationState.classes"
+          :title="commentModerationState.tooltip"
         >
-          <fluent-icon icon="dismiss-circle" size="12" />
-          <span>{{ commentDeletedLabel }}</span>
+          <fluent-icon :icon="commentModerationState.icon" size="12" />
+          <span>{{ commentModerationState.label }}</span>
         </span>
       </div>
       <div
