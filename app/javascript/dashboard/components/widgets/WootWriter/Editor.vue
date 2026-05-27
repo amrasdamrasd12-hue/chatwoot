@@ -18,7 +18,12 @@ import VariableList from '../conversation/VariableList.vue';
 import TagTools from '../conversation/TagTools.vue';
 import CopilotMenuBar from './CopilotMenuBar.vue';
 import CalcChip from './CalcChip.vue';
-import { detectCalcExpression, normalizeDigits } from './utils/mathEvaluator';
+import {
+  detectCalcExpression,
+  normalizeDigits,
+  hasArabicDigits,
+  convertToArabicDigits,
+} from './utils/mathEvaluator';
 
 import { useEmitter } from 'dashboard/composables/emitter';
 import { useI18n } from 'vue-i18n';
@@ -714,27 +719,64 @@ function replaceExprWithResult(expr, result) {
   const target = `${expr}=`;
   let fromPos = null;
   let toPos = null;
+  let originalText = null;
 
-  // Normalize Arabic-Indic digits before searching so the expr (which
-  // detectCalcExpression already normalised to ASCII) matches even when
-  // the user typed ١٢+٥=.  Character lengths are identical so `idx`
+  // Normalize Arabic-Indic digits and percent sign before searching so the expr
+  // (which detectCalcExpression already normalised to ASCII) matches even when
+  // the user typed ١٢+٥= or ١٠٠-٢٠٪=. Character lengths are identical so `idx`
   // maps directly to the original text node position.
   doc.descendants((node, pos) => {
     if (fromPos !== null) return false;
     if (!node.isText) return true;
-    const idx = normalizeDigits(node.text).lastIndexOf(target);
+    const normalized = normalizeDigits(node.text).replace(/٪/g, '%');
+    const idx = normalized.lastIndexOf(target);
     if (idx !== -1) {
       fromPos = pos + idx;
       toPos = pos + idx + target.length;
+      originalText = node.text.slice(idx, idx + target.length);
     }
     return true;
   });
 
   if (fromPos === null) return;
+  const displayResult = hasArabicDigits(originalText)
+    ? convertToArabicDigits(result)
+    : result;
   const tr = editorState.tr.replaceWith(
     fromPos,
     toPos,
-    editorState.schema.text(result)
+    editorState.schema.text(displayResult)
+  );
+  editorView.dispatch(tr);
+}
+
+function insertResultAfterEquals(expr, result) {
+  if (!editorView) return;
+  const editorState = editorView.state;
+  const { doc } = editorState;
+  const target = `${expr}=`;
+  let eqPos = null;
+  let originalText = null;
+
+  doc.descendants((node, pos) => {
+    if (eqPos !== null) return false;
+    if (!node.isText) return true;
+    const normalized = normalizeDigits(node.text).replace(/٪/g, '%');
+    const idx = normalized.lastIndexOf(target);
+    if (idx !== -1) {
+      eqPos = pos + idx + target.length;
+      originalText = node.text.slice(idx, idx + target.length);
+    }
+    return true;
+  });
+
+  if (eqPos === null) return;
+  const displayResult = hasArabicDigits(originalText)
+    ? convertToArabicDigits(result)
+    : result;
+  const tr = editorState.tr.insert(
+    eqPos,
+    editorState.schema.text(` ${displayResult}`)
   );
   editorView.dispatch(tr);
 }
@@ -750,9 +792,19 @@ function acceptCalcChip() {
   calcChip.value = null;
 }
 
+function acceptCalcChipWithExpr() {
+  if (!calcChip.value) return;
+  const { expr, result } = calcChip.value;
+  insertResultAfterEquals(expr, result);
+  calcChip.value = null;
+}
+
 function checkCalcExpression() {
   const text = getEditorPlainText();
   const detected = detectCalcExpression(text);
+  if (detected && hasArabicDigits(text)) {
+    detected.result = convertToArabicDigits(detected.result);
+  }
   calcChip.value = detected;
 }
 
@@ -766,6 +818,9 @@ function onKeydown(event) {
   if (calcChip.value) {
     if (event.key === 'Escape') {
       dismissCalcChip();
+    } else if (event.key === ' ') {
+      event.preventDefault();
+      acceptCalcChipWithExpr();
     } else if (event.key === 'Tab') {
       event.preventDefault();
       acceptCalcChip();

@@ -15,6 +15,14 @@ export function normalizeDigits(str) {
   return str.replace(/[٠-٩]/g, d => ARABIC_INDIC.indexOf(d));
 }
 
+export function hasArabicDigits(str) {
+  return /[٠-٩]/.test(str);
+}
+
+export function convertToArabicDigits(str) {
+  return str.replace(/\d/g, d => ARABIC_INDIC[parseInt(d, 10)]);
+}
+
 const TOKEN_NUMBER = 'NUM';
 const TOKEN_OP = 'OP';
 const TOKEN_LPAREN = 'LP';
@@ -195,7 +203,7 @@ export function evaluate(raw) {
  */
 export function detectCalcExpression(text) {
   if (!text) return null;
-  const normalized = normalizeDigits(text.trimEnd());
+  const normalized = normalizeDigits(text.trimEnd()).replace(/٪/g, '%');
   if (!normalized.endsWith('=')) return null;
   const withoutEq = normalized.slice(0, -1).trimEnd();
   const match = withoutEq.match(/([0-9.()+\-*/^%\s]+)$/);
