@@ -63,15 +63,28 @@ const replyToCommentHref = computed(() => {
 
 // Held outside the template so the vue-i18n bare-string rule keeps quiet —
 // the panel is Arabic-only, so plain literals are the right choice.
-const replyToHeading = computed(() => {
-  const r = replyToComment.value;
-  if (!r) return '';
-  return r.commenterName
-    ? `↩ رد على كومنت ${r.commenterName}`
-    : '↩ رد على كومنت العميل';
-});
-const replyToOpenLabel = 'افتح الكومنت ↗';
+const replyEyebrowLabel = 'رد على كومنت';
+const replyFallbackName = 'العميل';
 const replyToOpenTitle = 'افتح المحادثة الأصلية للكومنت في تبويبة جديدة';
+
+// Pull a single grapheme out of the commenter's name for the avatar
+// medallion. Arabic names commonly start with letters that are a single
+// codepoint, so charAt() is correct here. Fall back to a quotation glyph
+// when the name is missing — the medallion still looks intentional rather
+// than appearing as an empty circle.
+const replyCommenterInitial = computed(() => {
+  const name = replyToComment.value?.commenterName;
+  const ch = name?.trim?.()?.charAt(0);
+  return ch || '"';
+});
+const replyCommenterDisplay = computed(
+  () => replyToComment.value?.commenterName || replyFallbackName
+);
+// Curly quotation glyphs are held in JS so the bare-string lint rule keeps
+// quiet — they're decoration, not translatable copy.
+const replyQuoteOpenGlyph = '“';
+const replyQuoteCloseGlyph = '”';
+const replyEyebrowGlyph = '↩';
 
 const { hasTranslations, translationContent } =
   useTranslations(contentAttributes);
@@ -106,31 +119,73 @@ const handleSeeOriginal = () => {
 <template>
   <BaseBubble class="px-4 py-3" data-bubble-name="text">
     <div class="gap-3 flex flex-col">
-      <div
+      <component
+        :is="replyToCommentHref ? 'a' : 'div'"
         v-if="replyToComment"
-        class="border-s-[3px] border-n-brand/60 bg-n-alpha-2 dark:bg-n-alpha-3 rounded-md ps-2 pe-2 py-1.5 -mx-1 text-[12px] leading-snug"
+        :href="replyToCommentHref || undefined"
+        :target="replyToCommentHref ? '_blank' : undefined"
+        :rel="replyToCommentHref ? 'noopener noreferrer' : undefined"
+        :title="replyToCommentHref ? replyToOpenTitle : undefined"
+        class="group/quote relative flex items-stretch gap-3 -mx-1 -mt-1 mb-1 rounded-2xl bg-black/15 ring-1 ring-inset ring-white/10 px-3 py-2.5 backdrop-blur-sm transition-colors duration-150 ease-out hover:bg-black/25 hover:ring-white/20"
       >
-        <div
-          class="text-[10px] font-semibold uppercase tracking-wide text-n-slate-11 mb-0.5"
+        <span
+          aria-hidden="true"
+          class="pointer-events-none absolute inset-y-2 start-0 w-0.5 rounded-full bg-white/40"
+        />
+        <span
+          aria-hidden="true"
+          class="flex-shrink-0 self-center ms-1 inline-flex size-9 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/25 text-[14px] font-bold leading-none text-white/95 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]"
         >
-          {{ replyToHeading }}
-        </div>
-        <div
-          class="text-n-slate-12 line-clamp-3 whitespace-pre-line break-words"
+          {{ replyCommenterInitial }}
+        </span>
+        <span
+          class="flex min-w-0 flex-1 flex-col gap-0.5 justify-center py-0.5"
         >
-          {{ replyToComment.text }}
-        </div>
-        <a
+          <span
+            class="flex items-baseline gap-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/55"
+          >
+            <span aria-hidden="true">{{ replyEyebrowGlyph }}</span>
+            <span>{{ replyEyebrowLabel }}</span>
+            <span
+              class="truncate text-[12px] font-bold normal-case tracking-normal text-white/90"
+              :title="replyCommenterDisplay"
+            >
+              {{ replyCommenterDisplay }}
+            </span>
+          </span>
+          <span
+            class="text-[14px] font-medium leading-snug text-white line-clamp-2 break-words"
+          >
+            <span
+              aria-hidden="true"
+              class="me-0.5 inline-block font-serif text-[16px] leading-none text-white/55 align-baseline"
+              >{{ replyQuoteOpenGlyph }}</span
+            >{{ replyToComment.text
+            }}<span
+              aria-hidden="true"
+              class="ms-0.5 inline-block font-serif text-[16px] leading-none text-white/55 align-baseline"
+              >{{ replyQuoteCloseGlyph }}</span
+            >
+          </span>
+        </span>
+        <span
           v-if="replyToCommentHref"
-          :href="replyToCommentHref"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="inline-flex items-center gap-0.5 mt-1 text-[11px] font-semibold text-n-brand hover:underline"
-          :title="replyToOpenTitle"
+          aria-hidden="true"
+          class="flex-shrink-0 self-center inline-flex size-7 items-center justify-center rounded-full bg-white/10 text-white/70 ring-1 ring-white/10 transition-all duration-150 ease-out group-hover/quote:bg-white/20 group-hover/quote:text-white group-hover/quote:ring-white/25 group-hover/quote:translate-x-[-2px] rtl:group-hover/quote:translate-x-[2px]"
         >
-          {{ replyToOpenLabel }}
-        </a>
-      </div>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="size-3.5 rtl:-scale-x-100"
+          >
+            <path d="M5 12h14M13 5l7 7-7 7" />
+          </svg>
+        </span>
+      </component>
       <span v-if="isEmpty" class="text-n-slate-11">
         {{ $t('CONVERSATION.NO_CONTENT') }}
       </span>
