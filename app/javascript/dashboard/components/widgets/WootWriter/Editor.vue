@@ -19,6 +19,8 @@ import TagTools from '../conversation/TagTools.vue';
 import CopilotMenuBar from './CopilotMenuBar.vue';
 import CalcChip from './CalcChip.vue';
 import { detectCalcExpression, normalizeDigits } from './utils/mathEvaluator';
+import { Plugin, PluginKey } from 'prosemirror-state';
+import { Decoration, DecorationSet } from 'prosemirror-view';
 
 import { useEmitter } from 'dashboard/composables/emitter';
 import { useI18n } from 'vue-i18n';
@@ -271,9 +273,59 @@ function createSuggestionPlugin({
   });
 }
 
+// Regex matches a math expression ending with `=` at the end of a text node.
+// Character class: digits, `.`, `(`, `)`, `+`, `*`, `/`, `^`, `%`, whitespace, `-`.
+const CALC_ISOLATE_RE = /([0-9.()+*/^%\s-]+)=\s*$/;
+const calcIsolateKey = new PluginKey('calcIsolate');
+
+function buildCalcDecorations(doc) {
+  const decos = [];
+  doc.descendants((node, pos) => {
+    if (node.type.name !== 'paragraph') return true;
+    let lastText = null;
+    let lastOffset = 0;
+    node.forEach((child, childOffset) => {
+      if (child.isText) {
+        lastText = child;
+        lastOffset = childOffset;
+      }
+    });
+    if (!lastText) return true;
+    const m = CALC_ISOLATE_RE.exec(normalizeDigits(lastText.text));
+    if (!m) return true;
+    const from = pos + 1 + lastOffset + (lastText.text.length - m[0].length);
+    const to = pos + 1 + lastOffset + lastText.text.length;
+    decos.push(
+      Decoration.inline(from, to, {
+        style: 'unicode-bidi: isolate; direction: ltr;',
+      })
+    );
+    return true;
+  });
+  return DecorationSet.create(doc, decos);
+}
+
+const calcIsolatePlugin = new Plugin({
+  key: calcIsolateKey,
+  state: {
+    init(_, { doc }) {
+      return buildCalcDecorations(doc);
+    },
+    apply(tr, old) {
+      if (!tr.docChanged) return old;
+      return buildCalcDecorations(tr.doc);
+    },
+  },
+  props: {
+    decorations(edState) {
+      return calcIsolateKey.getState(edState);
+    },
+  },
+});
+
 const plugins = computed(() => {
   if (!props.enableSuggestions) {
-    return [];
+    return [calcIsolatePlugin];
   }
 
   return [
@@ -307,6 +359,7 @@ const plugins = computed(() => {
       showMenu: showEmojiMenu,
       searchTerm: emojiSearchTerm,
     }),
+    calcIsolatePlugin,
   ];
 });
 
