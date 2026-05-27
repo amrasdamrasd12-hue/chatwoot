@@ -787,22 +787,29 @@ function getParagraphDir(text) {
   return document.documentElement.getAttribute('dir') || 'ltr';
 }
 
-// NodeView: sets dir per-paragraph and re-evaluates on every text change
-// via MutationObserver.  This correctly handles Arabic-Indic digits (١٢٣)
-// which Unicode classifies as AN (not strong-R), so dir="auto" alone
-// leaves them LTR.
-function makeParagraphNodeView() {
+// NodeView: sets dir per-paragraph using ProseMirror's own update()
+// hook so direction stays correct without a MutationObserver (which
+// would trigger infinite re-render loops via ProseMirror's DOM watcher).
+// Handles Arabic-Indic digits (١٢٣, U+0660-U+0669) which dir="auto"
+// ignores because Unicode classifies them as AN, not strong-R.
+function makeParagraphNodeView(pmNode) {
   const dom = document.createElement('p');
 
-  function syncDir() {
-    dom.setAttribute('dir', getParagraphDir(dom.textContent || ''));
+  function syncDir(text) {
+    dom.setAttribute('dir', getParagraphDir(text));
   }
 
-  syncDir();
-  const mo = new MutationObserver(syncDir);
-  mo.observe(dom, { childList: true, subtree: true, characterData: true });
+  syncDir(pmNode.textContent);
 
-  return { dom, contentDOM: dom, destroy: () => mo.disconnect() };
+  return {
+    dom,
+    contentDOM: dom,
+    update(updatedNode) {
+      if (updatedNode.type !== pmNode.type) return false;
+      syncDir(updatedNode.textContent);
+      return true;
+    },
+  };
 }
 
 function createEditorView() {
