@@ -783,7 +783,9 @@ function getParagraphDir(text) {
     if (ARABIC_RE.test(text[i])) return 'rtl';
     if (LATIN_RE.test(text[i])) return 'ltr';
   }
-  // Neutral content (digits-only, punctuation) → LTR so math reads naturally L→R.
+  // Digits-only paragraphs: use LTR. Both Arabic (٠-٩) and English (0-9) digits
+  // are "weak" in the bidi algorithm and will display correctly in LTR context
+  // without visual reordering.
   return 'ltr';
 }
 
@@ -1056,7 +1058,7 @@ useEmitter(BUS_EVENTS.INSERT_INTO_RICH_EDITOR, insertContentIntoEditor);
     @apply p-0 break-words text-n-slate-12;
 
     p {
-      unicode-bidi: plaintext;
+      unicode-bidi: embed;
     }
 
     p[dir='rtl'] {
