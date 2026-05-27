@@ -16,6 +16,7 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
     counts = Current.account.conversations
                     .joins(:messages)
                     .where(inbox: policy_scope(Current.account.inboxes))
+                    .where(status: :open)
                     .where(messages: { account_id: Current.account.id, message_type: Message.message_types[:incoming] })
                     .where('conversations.agent_last_seen_at IS NULL OR messages.created_at > conversations.agent_last_seen_at')
                     .group(:inbox_id)
