@@ -19,20 +19,35 @@ const accountId = useMapGetter('getCurrentAccountId');
 // content_attributes (see chatwoot-mirror.ts). Render an FB-style quoted
 // reply block above the message so agents know which comment this DM
 // answered, with a one-click jump back to the comment conversation.
+// MessageList pipes incoming messages through useCamelCase (see
+// MessageList.vue:45), so what the mirror writes as
+// `eltafouk_reply_to_comment_text` arrives here as
+// `eltafoukReplyToCommentText`. Read with dynamic indexing so the bundler
+// can't statically eliminate either branch as dead code (a `??` chain got
+// minified down to only the snake_case path in production builds).
+const pickAttr = (ca, ...keys) => {
+  const hit = keys.find(k => ca[k] !== undefined && ca[k] !== null);
+  return hit ? ca[hit] : undefined;
+};
+
 const replyToComment = computed(() => {
   const ca = contentAttributes.value || {};
-  // MessageList pipes incoming messages through useCamelCase (see
-  // MessageList.vue:45), so what our mirror writes as
-  // `eltafouk_reply_to_comment_text` arrives here as
-  // `eltafoukReplyToCommentText`. Read both so the block also renders for
-  // any code path that may bypass the camelCase conversion.
-  const commentText =
-    ca.eltafoukReplyToCommentText ?? ca.eltafouk_reply_to_comment_text;
+  const commentText = pickAttr(
+    ca,
+    'eltafoukReplyToCommentText',
+    'eltafouk_reply_to_comment_text'
+  );
   if (!commentText || typeof commentText !== 'string') return null;
-  const convId =
-    ca.eltafoukReplyToCommentConvId ?? ca.eltafouk_reply_to_comment_conv_id;
-  const commenterName =
-    ca.eltafoukReplyToCommenterName ?? ca.eltafouk_reply_to_commenter_name;
+  const convId = pickAttr(
+    ca,
+    'eltafoukReplyToCommentConvId',
+    'eltafouk_reply_to_comment_conv_id'
+  );
+  const commenterName = pickAttr(
+    ca,
+    'eltafoukReplyToCommenterName',
+    'eltafouk_reply_to_commenter_name'
+  );
   return {
     text: commentText,
     convId: convId || null,
