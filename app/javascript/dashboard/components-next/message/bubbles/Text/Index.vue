@@ -138,30 +138,30 @@ const handleSeeOriginal = () => {
           class="flex min-w-0 flex-1 flex-col gap-0.5 justify-center py-0.5"
         >
           <span
-            class="flex items-baseline gap-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] ![color:#64748b]"
+            class="flex items-baseline gap-1.5 [font-size:10px] font-semibold uppercase tracking-[0.08em] [color:#64748b]"
           >
-            <span aria-hidden="true" class="![color:#94a3b8]">{{
+            <span aria-hidden="true" class="[color:#94a3b8]">{{
               replyEyebrowGlyph
             }}</span>
             <span>{{ replyEyebrowLabel }}</span>
             <span
-              class="truncate text-[12px] font-bold normal-case tracking-normal ![color:#0f172a]"
+              class="truncate [font-size:12px] font-bold normal-case tracking-normal [color:#0f172a]"
               :title="replyCommenterDisplay"
             >
               {{ replyCommenterDisplay }}
             </span>
           </span>
           <span
-            class="text-[14px] font-medium leading-snug ![color:#1e293b] line-clamp-2 break-words"
+            class="[font-size:14px] font-medium leading-snug [color:#1e293b] line-clamp-2 break-words"
           >
             <span
               aria-hidden="true"
-              class="me-0.5 inline-block font-serif text-[18px] leading-none ![color:#cbd5e1] align-baseline"
+              class="me-0.5 inline-block font-serif [font-size:18px] leading-none [color:#cbd5e1] align-baseline"
               >{{ replyQuoteOpenGlyph }}</span
             >{{ replyToComment.text
             }}<span
               aria-hidden="true"
-              class="ms-0.5 inline-block font-serif text-[18px] leading-none ![color:#cbd5e1] align-baseline"
+              class="ms-0.5 inline-block font-serif [font-size:18px] leading-none [color:#cbd5e1] align-baseline"
               >{{ replyQuoteCloseGlyph }}</span
             >
           </span>
