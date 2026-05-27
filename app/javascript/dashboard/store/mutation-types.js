@@ -12,6 +12,11 @@ export default {
   SET_ALL_CONVERSATION: 'SET_ALL_CONVERSATION',
   EMPTY_ALL_CONVERSATION: 'EMPTY_ALL_CONVERSATION',
   SET_CONV_TAB_META: 'SET_CONV_TAB_META',
+  // Eltafouk: separate counts when re-fetching meta with
+  // conversation_type=unread, so the unread badge has its own
+  // single-source-of-truth that won't be clobbered by the regular
+  // tab-meta fetch.
+  SET_CONV_UNREAD_META: 'SET_CONV_UNREAD_META',
   CLEAR_LIST_LOADING_STATUS: 'CLEAR_LIST_LOADING_STATUS',
   SET_LIST_LOADING_STATUS: 'SET_LIST_LOADING_STATUS',
   SET_ALL_MESSAGES_LOADED: 'SET_ALL_MESSAGES_LOADED',

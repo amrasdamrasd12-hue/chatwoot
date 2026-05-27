@@ -128,12 +128,6 @@ const folders = useMapGetter('customViews/getConversationCustomViews');
 const agentList = useMapGetter('agents/getAgents');
 const teamsList = useMapGetter('teams/getTeams');
 const inboxesList = useMapGetter('inboxes/getInboxes');
-// Per-inbox unread total maintained server-side, mirrored to the store via
-// fetchUnattendedCounts. Reading this so the unread-filter pill can show
-// the true total for the current view (not just the slice currently
-// rendered in the virtual list). Matches the count the agent sees on
-// the same inbox in the sidebar.
-const getInboxUnattendedCountFn = useMapGetter('inboxes/getUnattendedCount');
 const campaigns = useMapGetter('campaigns/getAllCampaigns');
 const labels = useMapGetter('labels/getLabels');
 const currentAccountId = useMapGetter('getCurrentAccountId');
@@ -385,29 +379,26 @@ const conversationList = computed(() => {
 });
 
 // Server-truth unread total for whatever scope the agent is viewing,
-// pulled from the same store the sidebar's per-inbox badges read from.
-// This is independent of how much of the list is currently rendered
-// into the virtual scroller — the badge would otherwise undercount
-// dramatically (15 vs the real 166) on long lists.
+// Reads from conversationStats.unread* counts — the dedicated unread
+// meta-slot fetched via `conversationStats/getUnread` whenever the
+// view-defining filters change. That uses the EXACT same /meta endpoint
+// the tabs read from (just with conversation_type=unread layered on),
+// so the badge and the post-filter tab counts share one source of
+// truth and can't drift apart anymore.
 //
-// Source ladder, matching the resolution order Chatwoot uses elsewhere:
-//   1. specific inbox  → that inbox's unattendedCount
-//   2. anything else (team / label / folder / "all")
-//                      → sum of unattendedCount across non-comment
-//                        inboxes, which is exactly what the sidebar
-//                        renders next to the "المحادثات" header
-//
-// Team / label / folder scopes don't have first-class unattended
-// getters in the store, so they fall through to the sum. That's a
-// slight overcount for those views; iterate later if it matters.
+// Tab-aware: each tab gets the matching unread count. "محادثاتي" shows
+// the agent's unread, "غير معيّن" shows unassigned unread, "الكل" shows
+// the full unread total. Mirrors how the unread filter itself narrows
+// by assignee_type.
 const unreadCountInCurrentView = computed(() => {
-  const inboxId = Number(props.conversationInbox || 0);
-  if (inboxId > 0) {
-    return getInboxUnattendedCountFn.value(inboxId);
+  const stats = conversationStats.value || {};
+  if (activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.ME) {
+    return stats.unreadMineCount || 0;
   }
-  return inboxesList.value
-    .filter(ib => !ib.is_comment_inbox)
-    .reduce((sum, ib) => sum + getInboxUnattendedCountFn.value(ib.id), 0);
+  if (activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.UNASSIGNED) {
+    return stats.unreadUnAssignedCount || 0;
+  }
+  return stats.unreadAllCount || 0;
 });
 
 const showEndOfListMessage = computed(() => {
@@ -881,6 +872,14 @@ function toggleSelectAll(check) {
 useEmitter('fetch_conversation_stats', () => {
   if (hasAppliedFiltersOrActiveFolders.value) return;
   store.dispatch('conversationStats/get', conversationFilters.value);
+  // Refresh the unread companion stats so the badge stays in sync with
+  // the post-filter tab counts. Stripping showUnreadOnly off the params
+  // is intentional — `getUnread` always forces conversation_type=unread,
+  // and we don't want our own showUnreadOnly toggle to confuse it.
+  store.dispatch('conversationStats/getUnread', {
+    ...conversationFilters.value,
+    conversationType: undefined,
+  });
 });
 
 useEventListener(conversationDynamicScroller, 'scroll', handleScroll);
@@ -891,6 +890,12 @@ onMounted(() => {
   store.dispatch('setChatStatusFilter', activeStatus.value);
   store.dispatch('setChatSortFilter', activeSortBy.value);
   resetAndFetchData();
+  // Seed the unread badge's count source. Fires on every list mount so
+  // the pill has a real number on first render rather than 0.
+  store.dispatch('conversationStats/getUnread', {
+    ...conversationFilters.value,
+    conversationType: undefined,
+  });
   if (hasActiveFolders.value) {
     store.dispatch('campaigns/get');
   }
@@ -977,6 +982,16 @@ watch(chatLists, () => {
 watch(conversationFilters, (newVal, oldVal) => {
   if (newVal !== oldVal) {
     store.dispatch('updateChatListFilters', newVal);
+    // Keep the unread badge in lockstep with the post-filter tab
+    // counts: same /meta endpoint, same scope params, the only delta
+    // is `conversation_type=unread`. Strip our own showUnreadOnly
+    // injection (conversationType: 'unread') so getUnread is always
+    // the canonical unread-meta call regardless of whether the agent
+    // currently has the filter pill pressed.
+    store.dispatch('conversationStats/getUnread', {
+      ...newVal,
+      conversationType: undefined,
+    });
   }
 });
 </script>
