@@ -945,15 +945,23 @@ watch(
   () => resetAndFetchData()
 );
 // Eltafouk: toggling the "غير مقروء" pill changes `conversationFilters`
-// (it injects conversation_type=unattended), but the existing
+// (it injects conversation_type=unread), but the existing
 // conversationFilters watcher below only commits the new filter to the
 // store — it doesn't refetch. Without a reset+refetch, the 800-row
 // list that was loaded for the unfiltered view stays on screen and
-// completely buries the one unattended row the backend would return.
+// completely buries the rows the backend would return.
 // Treat showUnreadOnly the same way as the other view-defining props
 // (inbox/team/label/conversationType): clear the list and refetch on
 // either edge so the displayed set always matches the filter.
-watch(showUnreadOnly, () => resetAndFetchData());
+//
+// Also refresh per-inbox unattended counts so the badge number (which
+// is summed from those counts) doesn't lag behind the live meta result
+// that drives the tab counters — agents reported a 17-vs-18 drift when
+// the cached sidebar values were stale.
+watch(showUnreadOnly, () => {
+  store.dispatch('inboxes/fetchUnattendedCounts');
+  resetAndFetchData();
+});
 
 watch(activeFolder, (newVal, oldVal) => {
   if (newVal !== oldVal) {
