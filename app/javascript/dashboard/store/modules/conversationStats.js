@@ -39,7 +39,7 @@ const fetchUnreadMetaData = async (commit, params) => {
   try {
     const response = await ConversationApi.meta({
       ...params,
-      conversation_type: 'unread',
+      conversationType: 'unread',
     });
     const {
       data: { meta },
