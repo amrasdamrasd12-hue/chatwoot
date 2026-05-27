@@ -126,15 +126,11 @@ const handleSeeOriginal = () => {
         :target="replyToCommentHref ? '_blank' : undefined"
         :rel="replyToCommentHref ? 'noopener noreferrer' : undefined"
         :title="replyToCommentHref ? replyToOpenTitle : undefined"
-        class="group/quote relative flex items-stretch gap-3 -mx-1 -mt-1 mb-1 rounded-2xl bg-black/15 ring-1 ring-inset ring-white/10 px-3 py-2.5 backdrop-blur-sm transition-colors duration-150 ease-out hover:bg-black/25 hover:ring-white/20"
+        class="group/quote relative flex items-stretch gap-3 -mx-1 -mt-1 mb-1 rounded-2xl bg-white text-slate-900 ring-1 ring-black/5 px-3 py-2.5 shadow-[0_4px_14px_-6px_rgba(15,23,42,0.35),0_2px_4px_-2px_rgba(15,23,42,0.2)] transition-all duration-150 ease-out hover:-translate-y-px hover:shadow-[0_6px_18px_-6px_rgba(15,23,42,0.45),0_2px_6px_-2px_rgba(15,23,42,0.25)]"
       >
         <span
           aria-hidden="true"
-          class="pointer-events-none absolute inset-y-2 start-0 w-0.5 rounded-full bg-white/40"
-        />
-        <span
-          aria-hidden="true"
-          class="flex-shrink-0 self-center ms-1 inline-flex size-9 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/25 text-[14px] font-bold leading-none text-white/95 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]"
+          class="flex-shrink-0 self-center inline-flex size-9 items-center justify-center rounded-full bg-slate-900 text-[14px] font-bold leading-none text-white shadow-[inset_0_-1px_0_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.12)]"
         >
           {{ replyCommenterInitial }}
         </span>
@@ -142,28 +138,30 @@ const handleSeeOriginal = () => {
           class="flex min-w-0 flex-1 flex-col gap-0.5 justify-center py-0.5"
         >
           <span
-            class="flex items-baseline gap-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/55"
+            class="flex items-baseline gap-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500"
           >
-            <span aria-hidden="true">{{ replyEyebrowGlyph }}</span>
+            <span aria-hidden="true" class="text-slate-400">{{
+              replyEyebrowGlyph
+            }}</span>
             <span>{{ replyEyebrowLabel }}</span>
             <span
-              class="truncate text-[12px] font-bold normal-case tracking-normal text-white/90"
+              class="truncate text-[12px] font-bold normal-case tracking-normal text-slate-900"
               :title="replyCommenterDisplay"
             >
               {{ replyCommenterDisplay }}
             </span>
           </span>
           <span
-            class="text-[14px] font-medium leading-snug text-white line-clamp-2 break-words"
+            class="text-[14px] font-medium leading-snug text-slate-800 line-clamp-2 break-words"
           >
             <span
               aria-hidden="true"
-              class="me-0.5 inline-block font-serif text-[16px] leading-none text-white/55 align-baseline"
+              class="me-0.5 inline-block font-serif text-[18px] leading-none text-slate-300 align-baseline"
               >{{ replyQuoteOpenGlyph }}</span
             >{{ replyToComment.text
             }}<span
               aria-hidden="true"
-              class="ms-0.5 inline-block font-serif text-[16px] leading-none text-white/55 align-baseline"
+              class="ms-0.5 inline-block font-serif text-[18px] leading-none text-slate-300 align-baseline"
               >{{ replyQuoteCloseGlyph }}</span
             >
           </span>
@@ -171,7 +169,7 @@ const handleSeeOriginal = () => {
         <span
           v-if="replyToCommentHref"
           aria-hidden="true"
-          class="flex-shrink-0 self-center inline-flex size-7 items-center justify-center rounded-full bg-white/10 text-white/70 ring-1 ring-white/10 transition-all duration-150 ease-out group-hover/quote:bg-white/20 group-hover/quote:text-white group-hover/quote:ring-white/25 group-hover/quote:translate-x-[-2px] rtl:group-hover/quote:translate-x-[2px]"
+          class="flex-shrink-0 self-center inline-flex size-7 items-center justify-center rounded-full bg-slate-100 text-slate-600 ring-1 ring-slate-200 transition-all duration-150 ease-out group-hover/quote:bg-slate-900 group-hover/quote:text-white group-hover/quote:ring-slate-900 group-hover/quote:translate-x-[-2px] rtl:group-hover/quote:translate-x-[2px]"
         >
           <svg
             viewBox="0 0 24 24"
