@@ -18,7 +18,7 @@ import VariableList from '../conversation/VariableList.vue';
 import TagTools from '../conversation/TagTools.vue';
 import CopilotMenuBar from './CopilotMenuBar.vue';
 import CalcChip from './CalcChip.vue';
-import { detectCalcExpression } from './utils/mathEvaluator';
+import { detectCalcExpression, normalizeDigits } from './utils/mathEvaluator';
 
 import { useEmitter } from 'dashboard/composables/emitter';
 import { useI18n } from 'vue-i18n';
@@ -715,12 +715,14 @@ function replaceExprWithResult(expr, result) {
   let fromPos = null;
   let toPos = null;
 
-  // Walk every text node; `pos` is the ProseMirror absolute position of the
-  // start of that text node (already accounts for block-open tokens).
+  // Normalize Arabic-Indic digits before searching so the expr (which
+  // detectCalcExpression already normalised to ASCII) matches even when
+  // the user typed ١٢+٥=.  Character lengths are identical so `idx`
+  // maps directly to the original text node position.
   doc.descendants((node, pos) => {
     if (fromPos !== null) return false;
     if (!node.isText) return true;
-    const idx = node.text.lastIndexOf(target);
+    const idx = normalizeDigits(node.text).lastIndexOf(target);
     if (idx !== -1) {
       fromPos = pos + idx;
       toPos = pos + idx + target.length;
@@ -771,14 +773,36 @@ function onKeydown(event) {
   }
 }
 
-// NodeView that adds dir="auto" to every paragraph so the browser's
-// bidi algorithm runs per-paragraph instead of inheriting the document
-// direction. Without this, paragraphs that start with neutral characters
-// (digits, punctuation) default to LTR even inside an RTL interface.
+// Regex to detect first strong RTL character (Arabic block, including
+// Arabic-Indic digits ١٢٣ which sit in U+0600-U+06FF).
+const ARABIC_RE = /[؀-ۿ]/;
+const LATIN_RE = /[A-Za-zÀ-ɏ]/;
+
+function getParagraphDir(text) {
+  for (let i = 0; i < text.length; i += 1) {
+    if (ARABIC_RE.test(text[i])) return 'rtl';
+    if (LATIN_RE.test(text[i])) return 'ltr';
+  }
+  // Neutral content (digits-only, punctuation) — follow the app direction.
+  return document.documentElement.getAttribute('dir') || 'ltr';
+}
+
+// NodeView: sets dir per-paragraph and re-evaluates on every text change
+// via MutationObserver.  This correctly handles Arabic-Indic digits (١٢٣)
+// which Unicode classifies as AN (not strong-R), so dir="auto" alone
+// leaves them LTR.
 function makeParagraphNodeView() {
   const dom = document.createElement('p');
-  dom.setAttribute('dir', 'auto');
-  return { dom, contentDOM: dom };
+
+  function syncDir() {
+    dom.setAttribute('dir', getParagraphDir(dom.textContent || ''));
+  }
+
+  syncDir();
+  const mo = new MutationObserver(syncDir);
+  mo.observe(dom, { childList: true, subtree: true, characterData: true });
+
+  return { dom, contentDOM: dom, destroy: () => mo.disconnect() };
 }
 
 function createEditorView() {

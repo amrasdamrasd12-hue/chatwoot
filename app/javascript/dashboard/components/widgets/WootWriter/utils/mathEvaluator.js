@@ -11,7 +11,7 @@
 const ARABIC_INDIC = '٠١٢٣٤٥٦٧٨٩';
 const MAX_RESULT = 1e15;
 
-function normalizeDigits(str) {
+export function normalizeDigits(str) {
   return str.replace(/[٠-٩]/g, d => ARABIC_INDIC.indexOf(d));
 }
 
