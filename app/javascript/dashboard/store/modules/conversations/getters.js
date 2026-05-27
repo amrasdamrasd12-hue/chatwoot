@@ -14,6 +14,25 @@ export const getSelectedChatConversation = ({
 }) =>
   allConversations.filter(conversation => conversation.id === selectedChatId);
 
+// Eltafouk: mirror of the backend ConversationFinder#set_inboxes guard.
+// Aggregate views (Mine / Unassigned / All) must never surface
+// comment-inbox conversations — those live in their own sidebar section
+// ("التعليقات") and are reached by explicitly picking a comment inbox.
+//
+// The store can still receive comment-inbox conversations through the
+// real-time ADD_CONVERSATION path (ActionCable's `conversation.created`
+// fires for every new conversation regardless of inbox), through prior
+// navigation into a comment inbox during the session, or through
+// updateConversation's fallback push. Filtering at the getter is the
+// catch-all that keeps the aggregate views clean no matter how the row
+// got into _state.allConversations.
+const isCommentInboxConversation = (rootGetters, conversation) => {
+  const inboxId = conversation?.inbox_id;
+  if (!inboxId) return false;
+  const inbox = rootGetters['inboxes/getInbox'](inboxId);
+  return Boolean(inbox && inbox.is_comment_inbox);
+};
+
 const getters = {
   getAllConversations: ({ allConversations, chatSortFilter: sortKey }) => {
     return allConversations.sort((a, b) => sortComparator(a, b, sortKey));
@@ -77,6 +96,7 @@ const getters = {
 
     return _state.allConversations
       .filter(conversation => {
+        if (isCommentInboxConversation(rootGetters, conversation)) return false;
         const { assignee } = conversation.meta;
         const isAssignedToMe = assignee && assignee.id === currentUserID;
         const shouldFilter = applyPageFilters(conversation, activeFilters);
@@ -97,9 +117,10 @@ const getters = {
     const hasAppliedFilters = _state.appliedFilters.length !== 0;
     return hasAppliedFilters ? filterQueryGenerator(_state.appliedFilters) : [];
   },
-  getUnAssignedChats: _state => activeFilters => {
+  getUnAssignedChats: (_state, _, __, rootGetters) => activeFilters => {
     return _state.allConversations
       .filter(conversation => {
+        if (isCommentInboxConversation(rootGetters, conversation)) return false;
         const isUnAssigned = !conversation.meta.assignee;
         const shouldFilter = applyPageFilters(conversation, activeFilters);
         return isUnAssigned && shouldFilter;
@@ -116,6 +137,7 @@ const getters = {
 
     return _state.allConversations
       .filter(conversation => {
+        if (isCommentInboxConversation(rootGetters, conversation)) return false;
         const shouldFilter = applyPageFilters(conversation, activeFilters);
         const allowedForRole = applyRoleFilter(
           conversation,
