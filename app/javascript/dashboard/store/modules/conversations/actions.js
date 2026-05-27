@@ -55,7 +55,10 @@ const actions = {
         params.assigneeType
       );
     } catch (error) {
-      // Handle error
+      // Eltafouk: always clear the loading flag on failure — otherwise
+      // the chat list spinner ("جاري جلب المحادثات") stays on screen
+      // forever and the user never sees the empty state to retry.
+      commit(types.CLEAR_LIST_LOADING_STATUS);
     }
   },
 
@@ -70,7 +73,7 @@ const actions = {
         'appliedFilters'
       );
     } catch (error) {
-      // Handle error
+      commit(types.CLEAR_LIST_LOADING_STATUS);
     }
   },
 
