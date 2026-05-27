@@ -125,6 +125,12 @@ class ConversationFinder
       @conversations = current_user.participating_conversations.where(account_id: current_account.id)
     when 'unattended'
       @conversations = @conversations.unattended
+    when 'unread'
+      # Eltafouk: matches the exact criteria the sidebar's per-inbox
+      # unread badge uses (incoming messages newer than the agent's
+      # last_seen). Used by the chat-list "غير مقروء" filter pill so
+      # the post-filter list matches the badge count by construction.
+      @conversations = @conversations.with_unread_incoming
     end
     @conversations
   end

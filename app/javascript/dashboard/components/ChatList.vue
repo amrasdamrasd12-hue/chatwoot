@@ -284,17 +284,16 @@ const conversationListPagination = computed(() => {
 
 const conversationFilters = computed(() => {
   // When the "غير مقروء" filter pill is pressed, route the request
-  // through the backend's `conversation_type=unattended` filter instead
-  // of relying on a client-side `unread_count > 0` pass over the loaded
-  // slice. With 30k+ conversations on a single inbox, the unread row is
-  // almost never in the first paginated batch, so the local-only filter
-  // returned an empty list even when the badge count said otherwise.
-  // The unattended scope on the backend (first_reply_created_at IS NULL
-  // OR waiting_since IS NOT NULL) is the same metric the sidebar's
-  // unattendedCount derives from, so the badge and the post-filter list
-  // now line up.
+  // through the backend's `conversation_type=unread` filter (a custom
+  // Eltafouk scope on the Conversation model that mirrors the exact
+  // criteria the sidebar's per-inbox unread badge uses: agent_last_seen
+  // is null OR there's an incoming message newer than it). Without
+  // this, a client-side `unread_count > 0` pass over the loaded slice
+  // misses the unread row entirely on inboxes with tens of thousands of
+  // conversations — and falling back to the broader `unattended` scope
+  // drifted the displayed list away from the badge count.
   const effectiveConversationType =
-    props.conversationType || (showUnreadOnly.value ? 'unattended' : undefined);
+    props.conversationType || (showUnreadOnly.value ? 'unread' : undefined);
   return {
     inboxId: props.conversationInbox ? props.conversationInbox : undefined,
     assigneeType: activeAssigneeTab.value,

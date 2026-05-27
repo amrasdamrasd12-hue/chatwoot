@@ -79,6 +79,21 @@ class Conversation < ApplicationRecord
   scope :assigned, -> { where.not(assignee_id: nil) }
   scope :assigned_to, ->(agent) { where(assignee_id: agent.id) }
   scope :unattended, -> { where(first_reply_created_at: nil).or(where.not(waiting_since: nil)) }
+  # Eltafouk: mirrors the exact query InboxesController#unattended_counts
+  # uses to feed the per-inbox unread badge in the sidebar. Conversations
+  # with at least one incoming message the agent hasn't seen yet
+  # (agent_last_seen_at is null OR there's an incoming message newer than
+  # it). Used by the chat-list "غير مقروء" filter pill so the displayed
+  # list matches the badge count by construction — the previous attempt
+  # to lean on the existing `unattended` scope drifted away because it's
+  # a broader definition (catches "never replied" rows with no unread
+  # activity).
+  scope :with_unread_incoming, lambda {
+    joins(:messages)
+      .where(messages: { message_type: Message.message_types[:incoming] })
+      .where('conversations.agent_last_seen_at IS NULL OR messages.created_at > conversations.agent_last_seen_at')
+      .distinct
+  }
   scope :resolvable_not_waiting, lambda { |auto_resolve_after|
     return none if auto_resolve_after.to_i.zero?
 
