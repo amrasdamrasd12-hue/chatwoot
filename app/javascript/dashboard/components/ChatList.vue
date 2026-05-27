@@ -365,15 +365,23 @@ const conversationList = computed(() => {
     });
   }
 
-  // Note: no local `unread_count > 0` filter here any more. The
-  // showUnreadOnly toggle now flows into conversationFilters as
-  // conversation_type=unattended, which makes the backend return the
-  // right set (and the sidebar/badge count is derived from the same
-  // server-side definition). A second client-side filter would only
-  // *narrow* that set incorrectly — e.g. an unattended conversation
-  // the agent already opened (unread_count=0 but no first reply yet)
-  // would get stripped out and the list would look empty even though
-  // the badge said otherwise.
+  // Two-layer narrowing for the "غير مقروء" toggle:
+  //   1. Backend layer (via conversationFilters → conversation_type=
+  //      unattended) loads the unattended subset into the store, so
+  //      conversations with unread messages are far more likely to be
+  //      in the rendered slice than they would be in the unfiltered
+  //      inbox (which can be tens of thousands deep).
+  //   2. Local layer (here) narrows that subset to rows whose
+  //      `unread_count > 0`. This matches the metric the badge counts
+  //      via `inboxes/getUnattendedCount` — Conversation.unattended
+  //      scope is broader (it also catches "never replied" rows with
+  //      no new incoming activity), and showing those would make the
+  //      list count drift away from the badge.
+  if (showUnreadOnly.value) {
+    localConversationList = localConversationList.filter(
+      conversation => conversation.unread_count > 0
+    );
+  }
   return localConversationList;
 });
 
