@@ -1098,9 +1098,18 @@ describe('Menu positioning helpers', () => {
   });
 
   describe('getMenuAnchor', () => {
-    it('returns end.left when menu is below selection', () => {
+    it('returns end.left for LTR when menu is below selection', () => {
       const coords = { start: { left: 50 }, end: { left: 150 }, onTop: false };
       expect(getMenuAnchor(coords, wrapperRect, false)).toBe(150);
+    });
+
+    it('returns start.right for RTL when menu is below selection', () => {
+      const coords = {
+        start: { right: 1500 },
+        end: { left: 1370 },
+        onTop: false,
+      };
+      expect(getMenuAnchor(coords, wrapperRect, true)).toBe(1500);
     });
 
     it('returns start.left for LTR when menu is above and visible', () => {

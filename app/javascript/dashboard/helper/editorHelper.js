@@ -570,7 +570,7 @@ export function getSelectionCoords(editorView, selection, rect) {
 export function getMenuAnchor(coords, rect, isRtl) {
   const { start, end, onTop } = coords;
 
-  if (!onTop) return end.left;
+  if (!onTop) return isRtl ? start.right : end.left;
 
   // If start of selection is visible, align to text. Else stick to container edge.
   if (start.top >= rect.top) return isRtl ? start.right : start.left;
