@@ -22,7 +22,6 @@ const props = defineProps({
 
 const emit = defineEmits([
   'addFolders',
-  'deleteFolders',
   'resetFilters',
   'basicFilterChange',
   'filtersModal',
@@ -165,15 +164,10 @@ const toggleConversationLayout = () => {
             :class="{ 'ltr:right-0 rtl:left-0': isOnExpandedLayout }"
           />
         </div>
-        <NextButton
-          id="toggleConversationFilterButton"
-          v-tooltip.top-end="$t('FILTER.CUSTOM_VIEWS.DELETE.DELETE_BUTTON')"
-          icon="i-lucide-trash-2"
-          ruby
-          xs
-          faded
-          @click="emit('deleteFolders')"
-        />
+        <!-- Eltafouk: trash icon removed. The custom views in this install
+             (e.g. "جميع قنوات التعليقات") are workflow-critical; a single
+             accidental confirm wipes them. To delete a view, do it from the
+             DB or temporarily restore this template block. -->
       </template>
       <div v-else class="relative">
         <NextButton
