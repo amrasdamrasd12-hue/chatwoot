@@ -7,6 +7,7 @@ const state = {
     count: 0,
     currentPage: 1,
     hasMore: false,
+    stats: {},
   },
   records: {},
   uiFlags: {

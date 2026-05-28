@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useStore, useMapGetter } from 'dashboard/composables/store';
 import { useAlert } from 'dashboard/composables';
@@ -21,7 +21,7 @@ const props = defineProps({
 
 const emit = defineEmits(['goToContactsList']);
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const store = useStore();
 
 const confirmDeleteContactDialogRef = ref(null);
@@ -47,15 +47,51 @@ onMounted(() => {
   Object.assign(contactData.value, getInitialContactData());
 });
 
+watch(
+  () => props.selectedContact,
+  () => {
+    Object.assign(contactData.value, getInitialContactData());
+  }
+);
+
 const createdAt = computed(() => {
   return contactData.value?.createdAt
-    ? dynamicTime(contactData.value.createdAt)
+    ? dynamicTime(contactData.value.createdAt, locale.value)
     : '';
+});
+
+const erpLinkStatus = computed(
+  () => props.selectedContact?.additionalAttributes?.erpLinkStatus || 'unlinked'
+);
+
+const erpStatusLabel = computed(() => {
+  const map = {
+    linked: t('CONTACTS_LAYOUT.CARD.EDIT_DETAILS_FORM.ERP_STATUS.LINKED'),
+    sync_required: t(
+      'CONTACTS_LAYOUT.CARD.EDIT_DETAILS_FORM.ERP_STATUS.SYNC_REQUIRED'
+    ),
+    sync_failed: t(
+      'CONTACTS_LAYOUT.CARD.EDIT_DETAILS_FORM.ERP_STATUS.SYNC_FAILED'
+    ),
+  };
+  return (
+    map[erpLinkStatus.value] ||
+    t('CONTACTS_LAYOUT.CARD.EDIT_DETAILS_FORM.ERP_STATUS.UNLINKED')
+  );
+});
+
+const erpStatusClass = computed(() => {
+  const map = {
+    linked: 'bg-n-teal-3 text-n-teal-11',
+    sync_required: 'bg-n-amber-3 text-n-amber-11',
+    sync_failed: 'bg-n-ruby-3 text-n-ruby-11',
+  };
+  return map[erpLinkStatus.value] || 'bg-n-alpha-2 text-n-slate-10';
 });
 
 const lastActivityAt = computed(() => {
   return contactData.value?.lastActivityAt
-    ? dynamicTime(contactData.value.lastActivityAt)
+    ? dynamicTime(contactData.value.lastActivityAt, locale.value)
     : '';
 });
 
@@ -69,8 +105,7 @@ const handleFormUpdate = updatedData => {
 
 const updateContact = async () => {
   try {
-    const { customAttributes, ...basicContactData } = contactData.value;
-    await store.dispatch('contacts/update', basicContactData);
+    await store.dispatch('contacts/update', contactData.value);
     await store.dispatch(
       'contacts/fetchContactableInbox',
       props.selectedContact.id
@@ -92,6 +127,7 @@ const handleAvatarUpload = async ({ file, url }) => {
   try {
     await store.dispatch('contacts/update', {
       ...contactsFormRef.value?.state,
+      id: props.selectedContact.id,
       avatar: file,
       isFormData: true,
     });
@@ -105,11 +141,11 @@ const handleAvatarDelete = async () => {
   try {
     if (props.selectedContact && props.selectedContact.id) {
       await store.dispatch('contacts/deleteAvatar', props.selectedContact.id);
+      avatarFile.value = null;
+      avatarUrl.value = '';
+      contactData.value.thumbnail = null;
       useAlert(t('CONTACTS_LAYOUT.DETAILS.AVATAR.DELETE.SUCCESS_MESSAGE'));
     }
-    avatarFile.value = null;
-    avatarUrl.value = '';
-    contactData.value.thumbnail = null;
   } catch (error) {
     useAlert(
       error.message
@@ -136,18 +172,26 @@ const handleAvatarDelete = async () => {
           {{ selectedContact?.name }}
         </h3>
         <div class="flex flex-col gap-1.5">
-          <span
-            v-if="selectedContact?.identifier"
-            class="inline-flex items-center gap-1 text-sm text-n-slate-11"
-          >
-            <span class="i-ph-user-gear text-n-slate-10 size-4" />
-            {{ selectedContact?.identifier }}
-          </span>
-          <span class="inline-flex items-center gap-1 text-sm text-n-slate-11">
+          <div class="flex items-center gap-2">
             <span
               v-if="selectedContact?.identifier"
-              class="i-ph-activity text-n-slate-10 size-4"
-            />
+              class="inline-flex items-center gap-1 text-sm text-n-slate-11"
+            >
+              <span class="i-ph-user-gear text-n-slate-10 size-4" />
+              {{ selectedContact?.identifier }}
+            </span>
+            <span
+              class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium"
+              :class="erpStatusClass"
+            >
+              {{ erpStatusLabel }}
+            </span>
+          </div>
+          <span
+            dir="auto"
+            class="inline-flex items-center gap-1 text-sm text-n-slate-11"
+          >
+            <span class="i-ph-activity text-n-slate-10 size-4" />
             {{ $t('CONTACTS_LAYOUT.DETAILS.CREATED_AT', { date: createdAt }) }}
             •
             {{

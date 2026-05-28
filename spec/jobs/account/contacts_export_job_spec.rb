@@ -58,7 +58,7 @@ RSpec.describe Account::ContactsExportJob do
       create(:contact, account: account, phone_number: '+910808080808', email: 'test2@text.example')
     end
 
-    it 'generates CSV file and attach to account' do
+    it 'generates Excel file and attach to account' do
       mailer = double
       allow(AdministratorNotifications::AccountNotificationMailer).to receive(:with).with(account: account).and_return(mailer)
       allow(mailer).to receive(:contact_export_complete)
@@ -68,6 +68,8 @@ RSpec.describe Account::ContactsExportJob do
       file_url = Rails.application.routes.url_helpers.rails_blob_url(account.contacts_export)
 
       expect(account.contacts_export).to be_present
+      expect(account.contacts_export.filename.to_s).to end_with('.xlsx')
+      expect(account.contacts_export.content_type).to eq(CsvSpecHelpers::EXCEL_CONTENT_TYPE)
       expect(file_url).to be_present
       expect(mailer).to have_received(:contact_export_complete).with(file_url, user.email)
     end
@@ -75,11 +77,11 @@ RSpec.describe Account::ContactsExportJob do
     it 'generates valid data export file' do
       described_class.perform_now(account.id, user.id, %w[id name email phone_number column_not_present], {})
 
-      csv_data = CSV.parse(account.contacts_export.download, headers: true)
-      emails = csv_data.pluck('email')
-      phone_numbers = csv_data.pluck('phone_number')
+      rows = xlsx_rows(account.contacts_export.download)
+      emails = rows.pluck('email')
+      phone_numbers = rows.pluck('phone_number')
 
-      expect(csv_data.length).to eq(account.contacts.count)
+      expect(rows.length).to eq(account.contacts.count)
 
       expect(emails).to include('test1@text.example', 'test2@text.example')
       expect(phone_numbers).to include('+910808080818', '+910808080808')
@@ -88,8 +90,8 @@ RSpec.describe Account::ContactsExportJob do
     it 'returns all resolved contacts as results when filter is not prvoided' do
       create(:contact, account: account, email: nil, phone_number: nil)
       described_class.perform_now(account.id, user.id, %w[id name email column_not_present], {})
-      csv_data = CSV.parse(account.contacts_export.download, headers: true)
-      expect(csv_data.length).to eq(account.contacts.resolved_contacts.count)
+      rows = xlsx_rows(account.contacts_export.download)
+      expect(rows.length).to eq(account.contacts.resolved_contacts.count)
     end
 
     it 'returns resolved contacts filtered if labels are provided' do
@@ -98,30 +100,30 @@ RSpec.describe Account::ContactsExportJob do
       contact = create(:contact, account: account, email: nil, phone_number: nil)
       contact.add_labels(['spec-billing'])
       described_class.perform_now(account.id, user.id, [], { :payload => nil, :label => 'spec-billing' })
-      csv_data = CSV.parse(account.contacts_export.download, headers: true)
+      rows = xlsx_rows(account.contacts_export.download)
       # since there is only 1 resolved contact with 'spec-billing' label
-      expect(csv_data.length).to eq(1)
+      expect(rows.length).to eq(1)
     end
 
     it 'returns filtered data limited to resolved contacts when filter is provided' do
       create(:contact, account: account, email: nil, phone_number: nil, additional_attributes: { :country_code => 'India' })
       described_class.perform_now(account.id, user.id, [], { :payload => [city_filter.merge(:query_operator => nil)] }.with_indifferent_access)
-      csv_data = CSV.parse(account.contacts_export.download, headers: true)
-      expect(csv_data.length).to eq(4)
+      rows = xlsx_rows(account.contacts_export.download)
+      expect(rows.length).to eq(4)
     end
 
     it 'returns filtered data when multiple filters are provided' do
       described_class.perform_now(account.id, user.id, [], multiple_filters.with_indifferent_access)
-      csv_data = CSV.parse(account.contacts_export.download, headers: true)
+      rows = xlsx_rows(account.contacts_export.download)
       # since there are only 4 contacts with 'looped' in email and 'India' as country_code
-      expect(csv_data.length).to eq(4)
+      expect(rows.length).to eq(4)
     end
 
     it 'returns filtered data when a single filter is provided' do
       described_class.perform_now(account.id, user.id, [], single_filter.with_indifferent_access)
-      csv_data = CSV.parse(account.contacts_export.download, headers: true)
+      rows = xlsx_rows(account.contacts_export.download)
       # since there are only 8 contacts with 'looped' in email
-      expect(csv_data.length).to eq(8)
+      expect(rows.length).to eq(8)
     end
   end
 end

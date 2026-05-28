@@ -80,6 +80,47 @@ const lastActivityAt = computed(() => {
   return timestamp ? shortTimestamp(dynamicTime(timestamp)) : '';
 });
 
+const usedPhoneLabel = computed(() => {
+  const sourceId = props.conversation?.meta?.source_id;
+  if (!sourceId) return null;
+
+  const primaryLast10 = (currentContact.value?.phoneNumber || '')
+    .replace(/\D/g, '')
+    .slice(-10);
+  const sourceLast10 = String(sourceId).replace(/\D/g, '').slice(-10);
+
+  if (primaryLast10 && primaryLast10 === sourceLast10) return null;
+
+  const attrs = currentContact.value?.additionalAttributes || {};
+
+  const mobileNumbers = Array.isArray(attrs.customCustomerMobileNumbers)
+    ? attrs.customCustomerMobileNumbers
+    : [];
+  const matchedRow = mobileNumbers.find(
+    row =>
+      String(row.phone || '')
+        .replace(/\D/g, '')
+        .slice(-10) === sourceLast10
+  );
+  if (matchedRow) return matchedRow.mobileOwner || matchedRow.phone;
+
+  if (
+    String(attrs.phoneSecondary || '')
+      .replace(/\D/g, '')
+      .slice(-10) === sourceLast10
+  )
+    return attrs.phoneSecondary;
+
+  if (
+    String(attrs.phoneAlternative || '')
+      .replace(/\D/g, '')
+      .slice(-10) === sourceLast10
+  )
+    return attrs.phoneAlternative;
+
+  return sourceId;
+});
+
 const showMessagePreviewWithoutMeta = computed(() => {
   const { labels = [] } = props.conversation;
   return (
@@ -128,9 +169,18 @@ const onCardClick = e => {
         {{ commentSourceLabel }}
       </span>
       <div class="flex items-center justify-between h-6 gap-2">
-        <h4 class="text-base font-medium truncate text-n-slate-12">
-          {{ currentContactName }}
-        </h4>
+        <div class="flex items-center gap-2 min-w-0">
+          <h4 class="text-base font-medium truncate text-n-slate-12">
+            {{ currentContactName }}
+          </h4>
+          <span
+            v-if="usedPhoneLabel"
+            class="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-xs bg-n-alpha-2 text-n-slate-11 border border-n-weak"
+          >
+            <span class="i-lucide-phone size-2.5" />
+            {{ usedPhoneLabel }}
+          </span>
+        </div>
         <div class="flex items-center gap-2">
           <CardPriorityIcon :priority="conversation.priority || null" />
           <div

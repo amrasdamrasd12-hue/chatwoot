@@ -61,8 +61,40 @@ class DataImport::ContactManager
   def update_contact_attributes(params, contact)
     contact.name = params[:name] if params[:name].present?
     contact.additional_attributes ||= {}
-    contact.additional_attributes[:company] = params[:company] if params[:company].present?
-    contact.additional_attributes[:city] = params[:city] if params[:city].present?
-    contact.assign_attributes(custom_attributes: contact.custom_attributes.merge(params.except(:identifier, :email, :name, :phone_number)))
+    contact.additional_attributes['company'] = params[:company] if params[:company].present?
+    contact.additional_attributes['city'] = params[:city] if params[:city].present?
+    contact.additional_attributes['custom_customer_classification'] = params[:classification] if params[:classification].present?
+
+    phones = build_phones_from_params(params)
+    contact.additional_attributes['custom_customer_mobile_numbers'] = phones if phones.any?
+
+    address = build_address_from_params(params)
+    if address.any?
+      existing = contact.additional_attributes['custom_addresses'] || []
+      existing[0] = (existing[0] || {}).merge(address)
+      contact.additional_attributes['custom_addresses'] = existing
+    end
+
+    excluded = %i[identifier email name phone_number classification phone_1 phone_2 phone_3
+                  governorate district neighborhood street]
+    contact.assign_attributes(custom_attributes: contact.custom_attributes.merge(params.except(*excluded)))
+  end
+
+  def build_phones_from_params(params)
+    %i[phone_1 phone_2 phone_3].filter_map.with_index do |key, idx|
+      phone = params[key].to_s.strip
+      next if phone.blank?
+
+      phone = "+20#{phone[1..]}" if phone.match?(/^0\d+$/)
+      phone = "+#{phone}" unless phone.start_with?('+')
+      { 'phone' => phone, 'phone_type' => 'Mobile', 'mobile_owner' => '',
+        'default_phone' => idx.zero?, 'whatsapp' => true, 'telegram' => false }
+    end
+  end
+
+  def build_address_from_params(params)
+    %w[governorate district neighborhood street].each_with_object({}) do |key, addr|
+      addr[key] = params[key.to_sym] if params[key.to_sym].present?
+    end
   end
 end

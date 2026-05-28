@@ -11,8 +11,8 @@ class DataImportJob < ApplicationJob
     begin
       process_import_file
       send_import_notification_to_admin
-    rescue CSV::MalformedCSVError => e
-      handle_csv_error(e)
+    rescue KeyError, Zlib::Error => e
+      handle_excel_error(e)
     end
   end
 
@@ -20,20 +20,20 @@ class DataImportJob < ApplicationJob
 
   def process_import_file
     @data_import.update!(status: :processing)
-    contacts, rejected_contacts = parse_csv_and_build_contacts
+    contacts, rejected_contacts = parse_excel_and_build_contacts
 
     import_contacts(contacts)
     update_data_import_status(contacts.length, rejected_contacts.length)
-    save_failed_records_csv(rejected_contacts)
+    save_failed_records_xlsx(rejected_contacts)
   end
 
-  def parse_csv_and_build_contacts
+  def parse_excel_and_build_contacts
     contacts = []
     rejected_contacts = []
 
     with_import_file do |file|
-      csv_reader(file).each do |row|
-        current_contact = @contact_manager.build_contact(row.to_h.with_indifferent_access)
+      xlsx_rows(file).each do |row|
+        current_contact = @contact_manager.build_contact(row.with_indifferent_access)
         if current_contact.valid?
           contacts << current_contact
         else
@@ -46,6 +46,7 @@ class DataImportJob < ApplicationJob
   end
 
   def append_rejected_contact(row, contact, rejected_contacts)
+    row = row.to_h
     row['errors'] = contact.errors.full_messages.join(', ')
     rejected_contacts << row
   end
@@ -59,28 +60,27 @@ class DataImportJob < ApplicationJob
     @data_import.update!(status: :completed, processed_records: processed_records, total_records: processed_records + rejected_records)
   end
 
-  def save_failed_records_csv(rejected_contacts)
-    csv_data = generate_csv_data(rejected_contacts)
-    return if csv_data.blank?
+  def save_failed_records_xlsx(rejected_contacts)
+    workbook_data = generate_xlsx_data(rejected_contacts)
+    return if workbook_data.blank?
 
-    @data_import.failed_records.attach(io: StringIO.new(csv_data), filename: "#{Time.zone.today.strftime('%Y%m%d')}_contacts.csv",
-                                       content_type: 'text/csv')
+    @data_import.failed_records.attach(
+      io: StringIO.new(workbook_data),
+      filename: "#{Time.zone.today.strftime('%Y%m%d')}_contacts.xlsx",
+      content_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
   end
 
-  def generate_csv_data(rejected_contacts)
-    headers = csv_headers
-    headers << 'errors'
+  def generate_xlsx_data(rejected_contacts)
     return if rejected_contacts.blank?
 
-    CSV.generate do |csv|
-      csv << headers
-      rejected_contacts.each do |record|
-        csv << record
-      end
-    end
+    headers = excel_headers + ['errors']
+    rows = [headers] + rejected_contacts.map { |record| headers.map { |header| record[header] } }
+    Contacts::XlsxBuilder.new(rows: rows, sheet_name: 'Failed contacts').generate
   end
 
-  def handle_csv_error(error) # rubocop:disable Lint/UnusedMethodArgument
+  def handle_excel_error(error)
+    Rails.logger.error("Contact import failed for account #{@data_import.account_id}: #{error.message}")
     @data_import.update!(status: :failed)
     send_import_failed_notification_to_admin
   end
@@ -93,21 +93,36 @@ class DataImportJob < ApplicationJob
     AdministratorNotifications::AccountNotificationMailer.with(account: @data_import.account).contact_import_failed.deliver_later
   end
 
-  def csv_headers
-    header_row = nil
+  def excel_headers
+    headers = []
     with_import_file do |file|
-      header_row = csv_reader(file).first
+      headers = workbook_headers(Contacts::XlsxParser.new(file.path).rows)
     end
-    header_row&.headers || []
+    headers
   end
 
-  def csv_reader(file)
-    file.rewind
-    raw_data = file.read
-    utf8_data = raw_data.force_encoding('UTF-8')
-    clean_data = utf8_data.valid_encoding? ? utf8_data : utf8_data.encode('UTF-16le', invalid: :replace, replace: '').encode('UTF-8')
+  def xlsx_rows(file)
+    workbook_rows = Contacts::XlsxParser.new(file.path).rows
+    return [] if workbook_rows.length < 2
 
-    CSV.new(StringIO.new(clean_data), headers: true)
+    headers = workbook_headers(workbook_rows)
+    workbook_rows.drop(1).filter_map do |row_values|
+      values = row_values.map { |value| normalize_cell_value(value) }
+      row = headers.zip(values).to_h
+      row if row.values.any?(&:present?)
+    end
+  end
+
+  def workbook_headers(workbook_rows)
+    return [] if workbook_rows.blank?
+
+    workbook_rows.first.map { |header| normalize_cell_value(header) }
+  end
+
+  def normalize_cell_value(value)
+    return '' if value.nil?
+
+    value.to_s.strip
   end
 
   def with_import_file

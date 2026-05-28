@@ -76,13 +76,13 @@ conversations:
       - "is_not_present"
   browser_language:
     attribute_type: "additional_attributes"
-    data_type: "text"
+    data_type: "text_case_insensitive"
     filter_operators:
       - "equal_to"
       - "not_equal_to"
   conversation_language:
     attribute_type: "additional_attributes"
-    data_type: "text"
+    data_type: "text_case_insensitive"
     filter_operators:
       - "equal_to"
       - "not_equal_to"
@@ -110,7 +110,7 @@ conversations:
       - "days_before"
   mail_subject:
     attribute_type: "additional_attributes"
-    data_type: "text"
+    data_type: "text_case_insensitive"
     filter_operators:
       - "equal_to"
       - "not_equal_to"
@@ -200,6 +200,42 @@ contacts:
   blocked:
     attribute_type: "standard"
     data_type: "boolean"
+    filter_operators:
+      - "equal_to"
+      - "not_equal_to"
+  custom_customer_classification:
+    attribute_type: "additional_attributes"
+    data_type: "text_case_insensitive"
+    filter_operators:
+      - "equal_to"
+      - "not_equal_to"
+      - "is_present"
+      - "is_not_present"
+  custom_library_classification:
+    attribute_type: "additional_attributes"
+    data_type: "text_case_insensitive"
+    filter_operators:
+      - "equal_to"
+      - "not_equal_to"
+  erp_link_status:
+    attribute_type: "additional_attributes"
+    data_type: "text_case_insensitive"
+    filter_operators:
+      - "equal_to"
+      - "not_equal_to"
+  address_governorate:
+    attribute_type: "jsonb_array"
+    data_type: "text_case_insensitive"
+    jsonb_array_key: "custom_addresses"
+    jsonb_array_field: "governorate"
+    filter_operators:
+      - "equal_to"
+      - "not_equal_to"
+  address_district:
+    attribute_type: "jsonb_array"
+    data_type: "text_case_insensitive"
+    jsonb_array_key: "custom_addresses"
+    jsonb_array_field: "district"
     filter_operators:
       - "equal_to"
       - "not_equal_to"

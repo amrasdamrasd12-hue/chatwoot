@@ -1,6 +1,7 @@
 json.meta do
   json.count @contacts_count
   json.current_page @current_page
+  json.stats @contacts_stats
 end
 
 json.payload do

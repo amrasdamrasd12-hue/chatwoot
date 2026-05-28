@@ -10,13 +10,17 @@ import filterQueryGenerator from 'dashboard/helper/filterQueryGenerator';
 
 import ContactsListLayout from 'dashboard/components-next/Contacts/ContactsListLayout.vue';
 import ContactEmptyState from 'dashboard/components-next/Contacts/EmptyState/ContactEmptyState.vue';
-import Spinner from 'dashboard/components-next/spinner/Spinner.vue';
 import ContactsList from 'dashboard/components-next/Contacts/Pages/ContactsList.vue';
+import ContactsStatsBar from 'dashboard/components-next/Contacts/ContactsStatsBar.vue';
+import ContactsTable from 'dashboard/components-next/Contacts/ContactsTable/ContactsTable.vue';
+import ContactsSkeleton from 'dashboard/components-next/Contacts/ContactsSkeleton.vue';
 import ContactsBulkActionBar from '../components/ContactsBulkActionBar.vue';
 import Dialog from 'dashboard/components-next/dialog/Dialog.vue';
 import BulkActionsAPI from 'dashboard/api/bulkActions';
 
-const DEFAULT_SORT_FIELD = 'last_activity_at';
+const DEFAULT_SORT_FIELD = 'created_at';
+const DEFAULT_PER_PAGE = 15;
+const PER_PAGE_OPTIONS = [15, 25, 50, 100, 250, 500, 1000];
 const DEBOUNCE_DELAY = 300;
 
 const store = useStore();
@@ -49,9 +53,15 @@ const parseSortSettings = (sortString = '') => {
   };
 };
 
-const { contacts_sort_by: contactSortBy = '' } = uiSettings.value ?? {};
+const {
+  contacts_sort_by: contactSortBy = '-created_at',
+  contacts_view_mode: savedContactsViewMode = 'table',
+  contacts_per_page: savedPerPage = DEFAULT_PER_PAGE,
+} = uiSettings.value ?? {};
 const { sort: initialSort, order: initialOrder } =
   parseSortSettings(contactSortBy);
+const viewMode = ref(savedContactsViewMode || 'table');
+const itemsPerPage = ref(savedPerPage || DEFAULT_PER_PAGE);
 
 const sortState = reactive({
   activeSort: initialSort,
@@ -71,6 +81,7 @@ const isSearchView = computed(() => !!searchQuery.value);
 const selectedContactIds = ref([]);
 const isBulkActionLoading = ref(false);
 const bulkDeleteDialogRef = ref(null);
+const contactsListLayoutRef = ref(null);
 const selectedCount = computed(() => selectedContactIds.value.length);
 const bulkDeleteDialogTitle = computed(() =>
   selectedCount.value > 1
@@ -96,6 +107,7 @@ const activeSegment = computed(() => {
 });
 
 const hasContacts = computed(() => contacts.value.length > 0);
+const hasVisibleContacts = computed(() => contacts.value.length > 0);
 const isContactIndexView = computed(
   () => route.name === 'contacts_dashboard_index' && pageNumber.value === 1
 );
@@ -150,6 +162,11 @@ const openBulkDeleteDialog = () => {
   bulkDeleteDialogRef.value?.open?.();
 };
 
+const openSelectedExportDialog = () => {
+  if (!selectedContactIds.value.length || isBulkActionLoading.value) return;
+  contactsListLayoutRef.value?.openContactExportDialog();
+};
+
 const toggleSelectAll = shouldSelect => {
   selectedContactIds.value = shouldSelect ? [...visibleContactIds.value] : [];
 };
@@ -188,6 +205,7 @@ const getCommonFetchParams = (page = 1) => ({
   page,
   sortAttr: buildSortAttr(),
   label: activeLabel.value,
+  perPage: itemsPerPage.value,
 });
 
 const fetchContacts = async (page = 1) => {
@@ -356,6 +374,19 @@ const handleSort = async ({ sort, order }) => {
     : fetchContacts());
 };
 
+const updateViewMode = async mode => {
+  viewMode.value = mode;
+  await updateUISettings({
+    contacts_view_mode: mode,
+  });
+};
+
+const updatePerPage = async perPage => {
+  itemsPerPage.value = perPage;
+  await updateUISettings({ contacts_per_page: perPage });
+  await fetchContactsBasedOnContext(1);
+};
+
 const createContact = async contact => {
   await store.dispatch('contacts/create', contact);
 };
@@ -369,6 +400,16 @@ watch(
     );
   },
   { deep: true }
+);
+
+watch(
+  () => uiSettings.value?.contacts_view_mode,
+  newViewMode => {
+    if (newViewMode) {
+      viewMode.value = newViewMode;
+    }
+  },
+  { immediate: true }
 );
 
 watch(hasSelection, value => {
@@ -438,11 +479,14 @@ onMounted(async () => {
     class="flex flex-col justify-between flex-1 h-full m-0 overflow-auto bg-n-surface-1"
   >
     <ContactsListLayout
+      ref="contactsListLayoutRef"
       :search-value="searchValue"
       :header-title="headerTitle"
       :current-page="currentPage"
       :total-items="totalItems"
       :show-pagination-footer="!isFetchingList && hasContacts && !isSearchView"
+      :items-per-page="itemsPerPage"
+      :per-page-options="PER_PAGE_OPTIONS"
       :active-sort="sortState.activeSort"
       :active-ordering="sortState.activeOrdering"
       :active-segment="activeSegment"
@@ -452,19 +496,22 @@ onMounted(async () => {
       :use-infinite-scroll="isSearchView"
       :has-more="hasMore"
       :is-loading-more="isLoadingMore"
+      :view-mode="viewMode"
+      :selected-contact-ids="selectedContactIds"
       @update:current-page="fetchContactsBasedOnContext"
+      @update:items-per-page="updatePerPage"
       @search="searchContacts"
       @update:sort="handleSort"
+      @update:view-mode="updateViewMode"
       @apply-filter="fetchSavedOrAppliedFilteredContact"
       @clear-filters="fetchContacts"
       @load-more="loadMoreSearchResults"
+      @contact-created="fetchContactsBasedOnContext(1)"
     >
-      <div
+      <ContactsSkeleton
         v-if="isFetchingList && !(isSearchView && hasContacts)"
-        class="flex items-center justify-center py-10 text-n-slate-11"
-      >
-        <Spinner />
-      </div>
+        :view-mode="viewMode"
+      />
 
       <template v-else>
         <ContactsBulkActionBar
@@ -475,6 +522,7 @@ onMounted(async () => {
           @toggle-all="toggleSelectAll"
           @clear-selection="clearSelection"
           @assign-labels="assignLabels"
+          @export-selected="openSelectedExportDialog"
           @delete-selected="openBulkDeleteDialog"
         />
         <ContactEmptyState
@@ -493,12 +541,29 @@ onMounted(async () => {
             {{ emptyStateMessage }}
           </span>
         </div>
-        <div v-else class="flex flex-col gap-4 px-6 pt-4 pb-6">
+        <div v-else class="flex flex-col gap-4 px-4 pt-4 pb-6 sm:px-6 lg:px-8">
+          <ContactsStatsBar :contacts="contacts" :meta="meta" />
           <ContactsList
+            v-if="viewMode === 'card' && hasVisibleContacts"
             :contacts="contacts"
             :selected-contact-ids="selectedContactIds"
             @toggle-contact="toggleContactSelection"
           />
+          <ContactsTable
+            v-else-if="hasVisibleContacts"
+            :contacts="contacts"
+            :selected-contact-ids="selectedContactIds"
+            :active-sort="sortState.activeSort"
+            :active-ordering="sortState.activeOrdering"
+            @toggle-contact="toggleContactSelection"
+            @toggle-all="toggleSelectAll"
+            @update:sort="handleSort"
+          />
+          <div v-else class="flex items-center justify-center py-10">
+            <span class="text-base text-n-slate-11">
+              {{ emptyStateMessage }}
+            </span>
+          </div>
           <Dialog
             v-if="selectedCount"
             ref="bulkDeleteDialogRef"

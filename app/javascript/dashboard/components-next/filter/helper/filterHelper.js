@@ -28,6 +28,11 @@ export const CONTACT_ATTRIBUTES = {
   REFERER: 'referer',
   BLOCKED: 'blocked',
   LABELS: 'labels',
+  CUSTOMER_CLASSIFICATION: 'custom_customer_classification',
+  LIBRARY_CLASSIFICATION: 'custom_library_classification',
+  ERP_LINK_STATUS: 'erp_link_status',
+  ADDRESS_GOVERNORATE: 'address_governorate',
+  ADDRESS_DISTRICT: 'address_district',
 };
 
 /**

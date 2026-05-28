@@ -287,30 +287,42 @@
       "ID": "(ID: {identifier})"
     }
   },
-
   "CONTACTS_LAYOUT": {
     "HEADER": {
       "TITLE": "Contacts",
       "SEARCH_TITLE": "Search contacts",
       "ACTIVE_TITLE": "Active contacts",
       "SEARCH_PLACEHOLDER": "Search...",
+      "CLEAR_SEARCH": "Clear search",
       "MESSAGE_BUTTON": "Message",
       "SEND_MESSAGE": "Send message",
       "BLOCK_CONTACT": "Block contact",
       "UNBLOCK_CONTACT": "Unblock contact",
+      "VIEW_TOGGLE": {
+        "TABLE": "Table view",
+        "CARD": "Card view"
+      },
       "BREADCRUMB": {
         "CONTACTS": "Contacts"
       },
       "ACTIONS": {
         "CONTACT_CREATION": {
           "ADD_CONTACT": "Add contact",
+          "ADD_CONTACT_SHORT": "Add",
           "EXPORT_CONTACT": "Export contacts",
+          "EXPORT_CONTACT_SHORT": "Export",
           "IMPORT_CONTACT": "Import contacts",
+          "IMPORT_CONTACT_SHORT": "Import",
           "SAVE_CONTACT": "Save contact",
           "EMAIL_ADDRESS_DUPLICATE": "This email address is in use for another contact.",
           "PHONE_NUMBER_DUPLICATE": "This phone number is in use for another contact.",
           "SUCCESS_MESSAGE": "Contact saved successfully",
-          "ERROR_MESSAGE": "Unable to save contact. Please try again later."
+          "ERROR_MESSAGE": "Unable to save contact. Please try again later.",
+          "DUPLICATE_PHONE_TITLE": "Phone number already in use",
+          "DUPLICATE_PHONE_SUBTITLE": "This number is registered to another contact and cannot be used again.",
+          "DUPLICATE_PHONE_ASSIGNED_TO": "Already assigned to",
+          "DUPLICATE_PHONE_DISMISS": "Got it",
+          "DIALOG_SUBTITLE": "Enter the customer's basic information"
         },
         "BLOCK_SUCCESS_MESSAGE": "This contact is blocked successfully",
         "BLOCK_ERROR_MESSAGE": "Unable to block contact. Please try again later.",
@@ -318,21 +330,144 @@
         "UNBLOCK_ERROR_MESSAGE": "Unable to unblock contact. Please try again later.",
         "IMPORT_CONTACT": {
           "TITLE": "Import contacts",
-          "DESCRIPTION": "Import contacts through a CSV file.",
-          "DOWNLOAD_LABEL": "Download a sample csv.",
-          "LABEL": "CSV File:",
+          "DESCRIPTION": "",
+          "LABEL": "Excel file:",
           "CHOOSE_FILE": "Choose file",
           "CHANGE": "Change",
           "CANCEL": "Cancel",
           "IMPORT": "Import",
-          "SUCCESS_MESSAGE": "You will be notified via email when the import is complete.",
+          "PROGRESS": "Validating and importing contacts...",
+          "DROPZONE_TITLE": "Drop your Excel workbook here or choose a file",
+          "DROPZONE_SUBTITLE": "Excel .xlsx files only. Keep the first row as column headers.",
+          "XLSX_ONLY": "Excel .xlsx only",
+          "VALIDATION_READY": "Ready to import after validation.",
+          "VALIDATION_ERROR": "Choose a valid Excel .xlsx file before importing.",
+          "WORKBOOK": {
+            "TITLE": "Workbook validation",
+            "DESCRIPTION": "The first sheet will be checked for readable headers before importing."
+          },
+          "CHECKS": {
+            "FORMAT": "File format",
+            "SHEET": "Detected sheet",
+            "FIRST_SHEET": "Sheet 1",
+            "HEADER": "First row",
+            "HEADER_ROW": "Column headers",
+            "READY": "File is ready to import",
+            "WAITING": "Waiting for an Excel file",
+            "READY_HINT": "Once the file is validated successfully, you can continue."
+          },
+          "PREVIEW": {
+            "TITLE": "Data preview",
+            "SUBTITLE": "Example of one row inside the Excel file",
+            "EXAMPLE": "Example of one row inside the Excel file",
+            "FIRST_ROWS": "First 3 rows from the uploaded file",
+            "LOADING": "Reading file preview...",
+            "ERROR": "Unable to read the file preview. You can still import a valid file.",
+            "EMPTY": "Choose at least one column to show the preview."
+          },
+          "TEMPLATE": {
+            "DOWNLOAD": "Download template",
+            "HINT": "Create an Excel file with the selected columns",
+            "ERROR": "Unable to download the template. Please try again."
+          },
+          "COLUMNS": {
+            "TITLE": "Import fields",
+            "DESCRIPTION": "Choose the fields to include in your import file.",
+            "SELECTED": "{count} selected",
+            "SELECT_ALL": "Select all",
+            "CLEAR": "Clear",
+            "NAME": "Name",
+            "EMAIL": "Email",
+            "IDENTIFIER": "External ID (ERP)",
+            "PHONE": "Phone number",
+            "COMPANY": "Company",
+            "CITY": "City",
+            "COUNTRY": "Country",
+            "LANGUAGE": "Language",
+            "CUSTOM_ATTRIBUTES": "Custom attributes",
+            "STANDARD": "Standard fields",
+            "CUSTOM": "Custom attributes",
+            "PREVIEW": {
+              "NAME": "Ahmed Mohamed",
+              "COMPANY": "Example company",
+              "CITY": "Riyadh",
+              "COUNTRY": "Saudi Arabia",
+              "LANGUAGE": "Arabic",
+              "CUSTOM_ATTRIBUTES": "Important customer",
+              "CLASSIFICATION": "Regular",
+              "GOVERNORATE": "Cairo",
+              "DISTRICT": "Heliopolis",
+              "NEIGHBORHOOD": "Al-Mirghani",
+              "STREET": "Nile Street"
+            },
+            "CLASSIFICATION": "Classification",
+            "PHONE_1": "Phone 1",
+            "PHONE_2": "Phone 2",
+            "PHONE_3": "Phone 3",
+            "GOVERNORATE": "Governorate",
+            "DISTRICT": "District",
+            "NEIGHBORHOOD": "Neighborhood",
+            "STREET": "Street"
+          },
+          "STEPS": {
+            "UPLOAD": "Upload",
+            "VALIDATE": "Validate",
+            "IMPORT": "Import"
+          },
+          "SUCCESS_MESSAGE": "{count} contacts imported successfully.",
           "ERROR_MESSAGE": "There was an error, please try again"
         },
         "EXPORT_CONTACT": {
           "TITLE": "Export contacts",
-          "DESCRIPTION": "Quickly export a csv file with comprehensive details of your contacts",
+          "DESCRIPTION": "Export a polished Excel workbook with the contact fields you need.",
           "CONFIRM": "Export",
-          "SUCCESS_MESSAGE": "Export is in progress. You will be notified on email when the export file is ready to download.",
+          "FORMAT": "Format",
+          "XLSX": "Excel workbook (.xlsx)",
+          "HERO_TITLE": "Prepare an Excel export",
+          "PROGRESS": "Preparing your export...",
+          "COLUMNS": {
+            "TITLE": "Columns",
+            "DESCRIPTION": "Choose the fields included in the Excel workbook.",
+            "SELECTED": "{count} selected",
+            "ID": "Serial ID",
+            "NAME": "Name",
+            "EMAIL": "Email",
+            "PHONE": "Phone number",
+            "IDENTIFIER": "External ID (ERP)",
+            "CREATED": "Created at",
+            "UPDATED": "Updated at",
+            "LAST_ACTIVITY": "Last activity",
+            "COMPANY": "Company",
+            "CITY": "City",
+            "COUNTRY": "Country",
+            "LANGUAGE": "Language",
+            "STANDARD": "Standard fields",
+            "CUSTOM": "Custom attributes",
+            "SELECT_ALL": "Select all",
+            "CLEAR": "Clear",
+            "CLASSIFICATION": "Classification",
+            "PHONE_1": "Phone 1",
+            "PHONE_2": "Phone 2",
+            "PHONE_3": "Phone 3",
+            "GOVERNORATE": "Governorate",
+            "DISTRICT": "District",
+            "NEIGHBORHOOD": "Neighborhood",
+            "STREET": "Street"
+          },
+          "SCOPE": {
+            "TITLE": "Scope",
+            "SELECTED": "Selected contacts ({count})",
+            "ALL": "All contacts",
+            "FILTERED": "Filtered contacts",
+            "SEGMENT": "Current segment",
+            "CURRENT_LABEL": "Current label"
+          },
+          "SUMMARY": {
+            "COLUMNS": "Columns",
+            "FORMAT": "Format",
+            "SCOPE": "Scope"
+          },
+          "SUCCESS_MESSAGE": "The Excel export was downloaded.",
           "ERROR_MESSAGE": "There was an error, please try again"
         },
         "SORT_BY": {
@@ -345,7 +480,8 @@
             "COUNTRY": "Country",
             "CITY": "City",
             "LAST_ACTIVITY": "Last activity",
-            "CREATED_AT": "Created at"
+            "CREATED_AT": "Created at",
+            "UPDATED_AT": "Last modified"
           }
         },
         "ORDER": {
@@ -376,6 +512,42 @@
         }
       }
     },
+    "STATS": {
+      "TOTAL": "Total contacts",
+      "ACTIVE": "Active now",
+      "NEW_THIS_WEEK": "New this week",
+      "INACTIVE": "Inactive",
+      "WITH_CONVERSATIONS": "With conversations",
+      "OF_TOTAL": "of total",
+      "CLASSIFICATIONS": "Customer classifications"
+    },
+    "TABLE": {
+      "EMPTY_VALUE": "—",
+      "VIEW": "View",
+      "TABLE_VIEW": "Table view",
+      "OPEN_CONVERSATION": "Open latest conversation",
+      "NO_CONVERSATION": "No conversation found for this contact.",
+      "CONVERSATIONS_COUNT": "{count} conversation | {count} conversations",
+      "COLUMNS": {
+        "NAME": "Name",
+        "PHONE": "Phone",
+        "CLASSIFICATION": "Classification",
+        "GOVERNORATE": "Governorate",
+        "DISTRICT": "District",
+        "CREATED_AT": "Created",
+        "CREATED": "Created",
+        "DETAILS": "Details",
+        "ACTIONS": "Actions"
+      }
+    },
+    "QUICK_FILTERS": {
+      "ACTIVE": "Active",
+      "NEW": "New",
+      "HAS_EMAIL": "Has email",
+      "HAS_PHONE": "Has phone",
+      "CLEAR": "Clear",
+      "EMPTY_STATE": "No contacts match this quick filter."
+    },
     "PAGINATION_FOOTER": {
       "SHOWING": "Showing {startItem} - {endItem} of {totalItems} contact | Showing {startItem} - {endItem} of {totalItems} contacts"
     },
@@ -392,6 +564,15 @@
       "BLOCKED": "Blocked",
       "BLOCKED_TRUE": "True",
       "BLOCKED_FALSE": "False",
+      "CUSTOMER_CLASSIFICATION": "Customer classification",
+      "LIBRARY_CLASSIFICATION": "Library classification",
+      "ERP_LINK_STATUS": "ERP status",
+      "ERP_STATUS_LINKED": "Linked",
+      "ERP_STATUS_UNLINKED": "Not linked",
+      "ERP_STATUS_SYNC_REQUIRED": "Sync required",
+      "ERP_STATUS_SYNC_FAILED": "Sync failed",
+      "ADDRESS_GOVERNORATE": "Governorate",
+      "ADDRESS_DISTRICT": "District",
       "BUTTONS": {
         "CLEAR_FILTERS": "Clear filters",
         "UPDATE_SEGMENT": "Update segment",
@@ -440,11 +621,123 @@
           },
           "COMPANY_NAME": {
             "PLACEHOLDER": "Enter the company name"
-          }
+          },
+          "CUSTOMER_NAME": {
+            "PLACEHOLDER": "Enter customer name"
+          },
+          "CUSTOMER_CLASSIFICATION": {
+            "LABEL": "Customer classification"
+          },
+          "CLASSIFICATION_OPTIONS": {
+            "LIBRARY": "Library",
+            "TEACHER": "Teacher",
+            "STUDENT": "Student",
+            "CENTER": "Center",
+            "OTHER": "Other"
+          },
+          "CLASSIFICATION_OTHER": {
+            "PLACEHOLDER": "Describe the classification"
+          },
+          "LIBRARY_CLASSIFICATION": {
+            "LABEL": "Library classification"
+          },
+          "LIBRARY_CLASSIFICATION_OPTIONS": {
+            "SECTOR": "قطاعي",
+            "WHOLESALE": "جملة"
+          },
+          "PHONE_PRIMARY": {
+            "PLACEHOLDER": "Primary WhatsApp number"
+          },
+          "PHONE_SECONDARY": {
+            "PLACEHOLDER": "Additional number"
+          },
+          "PHONE_ALTERNATIVE": {
+            "PLACEHOLDER": "Alternative number"
+          },
+          "ADDRESS_GOVERNORATE": {
+            "PLACEHOLDER": "Governorate"
+          },
+          "ADDRESS_DISTRICT": {
+            "PLACEHOLDER": "District / City"
+          },
+          "ADDRESS_NEIGHBORHOOD": {
+            "PLACEHOLDER": "Village / Neighborhood"
+          },
+          "ADDRESS_STREET": {
+            "PLACEHOLDER": "Short address"
+          },
+          "ADDRESS_LOCATION_URL": {
+            "PLACEHOLDER": "Location link (Google Maps)"
+          },
+          "CUSTOMER_DISCOUNT": {
+            "LABEL": "Current customer discount"
+          },
+          "EMAIL": {
+            "PLACEHOLDER": "Enter email address"
+          },
+          "IDENTIFIER": {
+            "PLACEHOLDER": "ERP customer code"
+          },
+          "NAME_LABEL": "Name",
+          "EMAIL_LABEL": "Email",
+          "IDENTIFIER_LABEL": "ERP Code"
         },
         "UPDATE_BUTTON": "Update contact",
         "SUCCESS_MESSAGE": "Contact updated successfully",
-        "ERROR_MESSAGE": "Unable to update contact. Please try again later."
+        "ERROR_MESSAGE": "Unable to update contact. Please try again later.",
+        "SECTIONS": {
+          "CUSTOMER": "Customer details",
+          "PHONES": "Phone numbers",
+          "ADDRESS": "Address",
+          "BUSINESS": "Business info"
+        },
+        "ERP_STATUS": {
+          "LINKED": "Linked to ERP",
+          "UNLINKED": "Not linked",
+          "SYNC_REQUIRED": "Needs sync",
+          "SYNC_FAILED": "Sync failed"
+        },
+        "PHONE_TABLE": {
+          "MOBILE_OWNER": "Mobile Owner",
+          "PHONE_TYPE": "Phone Type",
+          "PHONE": "Phone",
+          "WA": "WA",
+          "TG": "TG",
+          "DEFAULT": "Default",
+          "ADD_ROW": "Add number",
+          "EMPTY": "No phone numbers added yet",
+          "MOBILE_OWNER_OPTIONS": {
+            "PLACEHOLDER": "Select...",
+            "LIBRARY": {
+              "CONTACT": "Library Contact",
+              "EMPLOYEE": "Employee Number",
+              "OWNER": "Library Owner Number"
+            },
+            "TEACHER": {
+              "TEACHER": "Teacher Number",
+              "SECRETARY": "Secretary Number",
+              "CENTER": "Center Number"
+            },
+            "STUDENT": {
+              "STUDENT": "Student Number",
+              "PARENT": "Parent Number"
+            },
+            "CENTER": {
+              "CENTER": "Center Number"
+            }
+          }
+        },
+        "ADDRESS_TABLE": {
+          "GOVERNORATE": "Governorate",
+          "DISTRICT": "District / City",
+          "NEIGHBORHOOD": "Village / Neighborhood",
+          "STREET": "Address",
+          "LOCATION_URL": "Location URL",
+          "PRIMARY": "Primary",
+          "ADD_ROW": "Add address",
+          "EMPTY": "No addresses added yet",
+          "NO_RESULTS": "No results"
+        }
       },
       "SOCIAL_MEDIA": {
         "TITLE": "Edit social links",
@@ -586,6 +879,7 @@
     "SELECTED_COUNT": "{count} selected",
     "CLEAR_SELECTION": "Clear selection",
     "SELECT_ALL": "Select all ({count})",
+    "EXPORT_SELECTED": "Export selected",
     "DELETE_CONTACTS": "Delete",
     "DELETE_SUCCESS": "Contacts deleted successfully.",
     "DELETE_FAILED": "Failed to delete contacts.",
@@ -598,7 +892,6 @@
       "CONFIRM_SINGLE": "Delete contact"
     }
   },
-
   "COMPOSE_NEW_CONVERSATION": {
     "CONTACT_SEARCH": {
       "ERROR_MESSAGE": "We couldn’t complete the search. Please try again."

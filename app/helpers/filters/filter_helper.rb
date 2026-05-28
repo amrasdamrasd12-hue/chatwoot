@@ -35,9 +35,24 @@ module Filters::FilterHelper
     case current_filter['attribute_type']
     when 'additional_attributes'
       handle_additional_attributes(query_hash, filter_operator_value, current_filter['data_type'])
+    when 'jsonb_array'
+      handle_jsonb_array(query_hash, filter_operator_value, current_filter)
     else
       handle_standard_attributes(current_filter, query_hash, current_index, filter_operator_value)
     end
+  end
+
+  def handle_jsonb_array(query_hash, filter_operator_value, current_filter)
+    array_key = current_filter['jsonb_array_key']
+    field = current_filter['jsonb_array_field']
+    op = query_hash[:query_operator].to_s
+
+    field_expr = current_filter['data_type'] == 'text_case_insensitive' ? "LOWER(elem ->> '#{field}')" : "elem ->> '#{field}'"
+    inner = "#{field_expr} #{filter_operator_value}"
+    exists = 'EXISTS (SELECT 1 FROM jsonb_array_elements(' \
+             "COALESCE(#{filter_config[:table_name]}.additional_attributes -> '#{array_key}', '[]'::jsonb)" \
+             ") AS elem WHERE #{inner})"
+    "#{exists} #{op}"
   end
 
   def handle_nil_filter(query_hash, current_index)

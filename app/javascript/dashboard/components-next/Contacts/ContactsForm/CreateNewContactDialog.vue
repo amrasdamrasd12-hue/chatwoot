@@ -42,10 +42,37 @@ defineExpose({ dialogRef, contactsFormRef, onSuccess });
 <template>
   <Dialog
     ref="dialogRef"
-    width="3xl"
+    width="4xl"
     overflow-y-auto
+    sticky-footer
     @confirm="handleDialogConfirm"
   >
+    <!-- Dialog header -->
+    <div
+      class="flex flex-col items-center pb-6 mb-2 text-center border-b border-n-weak"
+    >
+      <button
+        type="button"
+        :aria-label="t('DIALOG.BUTTONS.CANCEL')"
+        class="absolute top-5 end-5 flex items-center justify-center size-10 rounded-lg text-n-slate-10 hover:bg-n-alpha-2 hover:text-n-slate-12 transition-colors"
+        @click="closeDialog"
+      >
+        <span class="i-lucide-x size-6" />
+      </button>
+      <div
+        class="flex items-center justify-center rounded-full size-16 bg-n-brand/10 mb-4"
+      >
+        <span class="i-lucide-user-round size-8 text-n-brand" />
+      </div>
+      <h2 class="text-xl font-bold text-n-slate-12">
+        {{ t('CONTACTS_LAYOUT.CARD.EDIT_DETAILS_FORM.SECTIONS.CUSTOMER') }}
+      </h2>
+      <p class="mt-1.5 text-base text-n-slate-10">
+        {{
+          t('CONTACTS_LAYOUT.HEADER.ACTIONS.CONTACT_CREATION.DIALOG_SUBTITLE')
+        }}
+      </p>
+    </div>
     <ContactsForm
       ref="contactsFormRef"
       is-new-contact
@@ -57,7 +84,7 @@ defineExpose({ dialogRef, contactsFormRef, onSuccess });
           :label="t('DIALOG.BUTTONS.CANCEL')"
           variant="link"
           type="reset"
-          class="h-10 hover:!no-underline hover:text-n-brand"
+          class="h-11 text-base hover:!no-underline hover:text-n-brand"
           @click="closeDialog"
         />
         <Button
@@ -66,6 +93,7 @@ defineExpose({ dialogRef, contactsFormRef, onSuccess });
             t('CONTACTS_LAYOUT.HEADER.ACTIONS.CONTACT_CREATION.SAVE_CONTACT')
           "
           color="blue"
+          class="!h-11 !text-base !px-5"
           :disabled="contactsFormRef?.isFormInvalid"
           :is-loading="isCreatingContact"
         />

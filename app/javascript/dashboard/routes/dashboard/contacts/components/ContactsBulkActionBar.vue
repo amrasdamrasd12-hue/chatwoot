@@ -26,6 +26,7 @@ const props = defineProps({
 const emit = defineEmits([
   'clearSelection',
   'assignLabels',
+  'exportSelected',
   'toggleAll',
   'deleteSelected',
 ]);
@@ -94,7 +95,7 @@ const handleAssignLabels = labels => {
 
 <template>
   <div
-    class="sticky top-0 z-10 bg-gradient-to-b from-n-background from-90% to-transparent px-6 pt-1 pb-2"
+    class="sticky top-0 z-10 bg-gradient-to-b from-n-background from-90% to-transparent px-4 pt-1 pb-2 sm:px-6 lg:px-8"
   >
     <BulkSelectBar
       v-model="selectionModel"
@@ -114,7 +115,17 @@ const handleAssignLabels = labels => {
         />
       </template>
       <template #actions>
-        <div class="flex items-center gap-2 ml-auto">
+        <div class="flex items-center gap-2 ltr:ml-auto rtl:mr-auto">
+          <Button
+            sm
+            faded
+            slate
+            icon="i-lucide-download"
+            :label="t('CONTACTS_BULK_ACTIONS.EXPORT_SELECTED')"
+            :disabled="!selectedCount || isLoading"
+            class="[&>span:nth-child(2)]:hidden sm:[&>span:nth-child(2)]:inline w-fit"
+            @click="emit('exportSelected')"
+          />
           <div
             v-on-click-outside="closeLabelSelector"
             class="relative flex items-center"

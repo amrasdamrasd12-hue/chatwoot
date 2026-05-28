@@ -1,18 +1,23 @@
-class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
+class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController # rubocop:disable Metrics/ClassLength
   include Sift
   sort_on :email, type: :string
   sort_on :name, internal_name: :order_on_name, type: :scope, scope_params: [:direction]
   sort_on :phone_number, type: :string
   sort_on :last_activity_at, internal_name: :order_on_last_activity_at, type: :scope, scope_params: [:direction]
   sort_on :created_at, internal_name: :order_on_created_at, type: :scope, scope_params: [:direction]
+  sort_on :updated_at, internal_name: :order_on_updated_at, type: :scope, scope_params: [:direction]
   sort_on :company, internal_name: :order_on_company_name, type: :scope, scope_params: [:direction]
   sort_on :city, internal_name: :order_on_city, type: :scope, scope_params: [:direction]
   sort_on :country, internal_name: :order_on_country_name, type: :scope, scope_params: [:direction]
 
-  RESULTS_PER_PAGE = 15
+  DEFAULT_RESULTS_PER_PAGE = 15
+  MAX_RESULTS_PER_PAGE = 1000
+  EXCEL_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'.freeze
+  EXCEL_MIME_TYPES = [EXCEL_CONTENT_TYPE, 'application/octet-stream'].freeze
 
   before_action :check_authorization
   before_action :set_current_page, only: [:index, :active, :search, :filter]
+  before_action :set_contacts_stats, only: [:index, :active, :search, :filter]
   before_action :fetch_contact, only: [:show, :update, :destroy, :avatar, :contactable_inboxes, :destroy_custom_attributes]
   before_action :set_include_contact_inboxes, only: [:index, :active, :search, :filter, :show, :update]
 
@@ -28,12 +33,25 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
     # contacts created via FB webhooks leave contacts.identifier empty but
     # store the PSID on contact_inboxes.source_id — without this OR the
     # dashboard panel can't link a public comment author to their DM thread.
+    # Also search inside custom_customer_mobile_numbers JSONB array so secondary
+    # phones can be found from the search UI.
     q = params[:q].strip
+    search_term = "%#{q}%"
     contacts = Current.account.contacts
                       .left_joins(:contact_inboxes)
                       .where(
-                        'contacts.name ILIKE :s OR contacts.email ILIKE :s OR contacts.phone_number ILIKE :s OR contacts.identifier LIKE :s OR contact_inboxes.source_id = :exact',
-                        s: "%#{q}%",
+                        "contacts.name ILIKE :s
+                         OR contacts.email ILIKE :s
+                         OR contacts.phone_number ILIKE :s
+                         OR contacts.identifier LIKE :s
+                         OR contact_inboxes.source_id = :exact
+                         OR EXISTS (
+                           SELECT 1 FROM jsonb_array_elements(
+                             COALESCE(contacts.additional_attributes->'custom_customer_mobile_numbers', '[]'::jsonb)
+                           ) AS mob
+                           WHERE mob->>'phone' ILIKE :s
+                         )",
+                        s: search_term,
                         exact: q
                       )
                       .distinct
@@ -42,20 +60,48 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
 
   def import
     render json: { error: I18n.t('errors.contacts.import.failed') }, status: :unprocessable_entity and return if params[:import_file].blank?
-
-    ActiveRecord::Base.transaction do
-      import = Current.account.data_imports.create!(data_type: 'contacts')
-      import.import_file.attach(params[:import_file])
+    unless xlsx_file?(params[:import_file])
+      render json: { error: I18n.t('errors.contacts.import.invalid_file_type') }, status: :unprocessable_entity and return
     end
 
-    head :ok
+    result = Contacts::Importer.new(account: Current.account, file: params[:import_file]).perform
+    render json: { message: I18n.t('errors.contacts.import.success'), payload: result }
+  rescue KeyError, Zlib::Error
+    render json: { error: I18n.t('errors.contacts.import.invalid_file_type') }, status: :unprocessable_entity
   end
 
   def export
     column_names = params['column_names']
-    filter_params = { :payload => params.permit!['payload'], :label => params.permit!['label'] }
-    Account::ContactsExportJob.perform_later(Current.account.id, Current.user.id, column_names, filter_params)
-    head :ok, message: I18n.t('errors.contacts.export.success')
+    filter_params = {
+      :payload => params.permit!['payload'],
+      :label => params.permit!['label'],
+      :selected_ids => selected_contact_ids
+    }
+    export = Contacts::ExportBuilder.new(account: Current.account, user: Current.user, column_names: column_names, params: filter_params)
+
+    send_data export.generate,
+              filename: export.filename,
+              type: EXCEL_CONTENT_TYPE,
+              disposition: 'attachment'
+  end
+
+  def import_template
+    columns = Contacts::ImportTemplateBuilder.valid_columns(params[:column_names], account: Current.account)
+    workbook_data = Contacts::ImportTemplateBuilder.new(columns, account: Current.account).generate
+
+    send_data workbook_data,
+              filename: 'contacts_import_template.xlsx',
+              type: EXCEL_CONTENT_TYPE,
+              disposition: 'attachment'
+  end
+
+  def preview_import
+    render_import_file_missing and return if params[:import_file].blank?
+    render_invalid_import_file and return unless xlsx_file?(params[:import_file])
+
+    render json: { payload: import_preview_payload }
+  rescue KeyError, Zlib::Error
+    render_invalid_import_file
   end
 
   # returns online contacts
@@ -98,12 +144,24 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
       @contact_inbox = build_contact_inbox
       process_avatar_from_url
     end
+  rescue ActiveRecord::RecordInvalid => e
+    phone_error = e.record.errors.where(:base, :taken_by).first
+    raise unless phone_error
+
+    render json: { message: phone_error.message, attributes: ['base'], error_type: 'phone_duplicate' },
+           status: :unprocessable_entity
   end
 
   def update
     @contact.assign_attributes(contact_update_params)
     @contact.save!
     process_avatar_from_url
+  rescue ActiveRecord::RecordInvalid => e
+    phone_error = e.record.errors.where(:base, :taken_by).first
+    raise unless phone_error
+
+    render json: { message: phone_error.message, attributes: ['base'], error_type: 'phone_duplicate' },
+           status: :unprocessable_entity
   end
 
   def destroy
@@ -125,6 +183,38 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
 
   private
 
+  def render_import_file_missing
+    render json: { error: I18n.t('errors.contacts.import.failed') }, status: :unprocessable_entity
+  end
+
+  def render_invalid_import_file
+    render json: { error: I18n.t('errors.contacts.import.invalid_file_type') }, status: :unprocessable_entity
+  end
+
+  def import_preview_payload
+    rows = Contacts::XlsxParser.new(params[:import_file].path).rows
+    headers = rows.first || []
+
+    {
+      headers: headers,
+      rows: rows.drop(1).first(3).map { |row| headers.each_index.map { |index| row[index].to_s } }
+    }
+  end
+
+  def selected_contact_ids
+    Array(params[:selected_ids]).filter_map do |id|
+      next if id.blank?
+
+      contact_id = id.to_i
+      contact_id if contact_id.positive?
+    end
+  end
+
+  def xlsx_file?(file)
+    File.extname(file.original_filename.to_s).casecmp('.xlsx').zero? &&
+      EXCEL_MIME_TYPES.include?(file.content_type)
+  end
+
   # TODO: Move this to a finder class
   def resolved_contacts
     return @resolved_contacts if @resolved_contacts
@@ -139,6 +229,28 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
     @current_page = params[:page] || 1
   end
 
+  def set_contacts_stats
+    total_contacts = Current.account.contacts.count
+    classification_counts = Current.account.contacts
+                                   .where("additional_attributes->>'custom_customer_classification' IS NOT NULL")
+                                   .where("additional_attributes->>'custom_customer_classification' != ''")
+                                   .group("additional_attributes->>'custom_customer_classification'")
+                                   .count
+
+    @contacts_stats = {
+      total_count: total_contacts,
+      new_this_week_count: Current.account.contacts.where('created_at >= ?', 1.week.ago).count,
+      classification_counts: classification_counts
+    }
+  end
+
+  def results_per_page
+    requested = params[:per_page].to_i
+    return DEFAULT_RESULTS_PER_PAGE unless requested.positive?
+
+    [requested, MAX_RESULTS_PER_PAGE].min
+  end
+
   def fetch_contacts(contacts)
     # Build includes hash to avoid separate query when contact_inboxes are needed
     includes_hash = { avatar_attachment: [:blob] }
@@ -147,23 +259,23 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
     filtrate(contacts)
       .includes(includes_hash)
       .page(@current_page)
-      .per(RESULTS_PER_PAGE)
+      .per(results_per_page)
   end
 
   def fetch_contacts_with_has_more(contacts)
     includes_hash = { avatar_attachment: [:blob] }
     includes_hash[:contact_inboxes] = { inbox: :channel } if @include_contact_inboxes
 
-    # Calculate offset manually to fetch one extra record for has_more check
-    offset = (@current_page.to_i - 1) * RESULTS_PER_PAGE
+    per_page = results_per_page
+    offset = (@current_page.to_i - 1) * per_page
     results = filtrate(contacts)
               .includes(includes_hash)
               .offset(offset)
-              .limit(RESULTS_PER_PAGE + 1)
+              .limit(per_page + 1)
               .to_a
 
-    @has_more = results.size > RESULTS_PER_PAGE
-    results = results.first(RESULTS_PER_PAGE) if @has_more
+    @has_more = results.size > per_page
+    results = results.first(per_page) if @has_more
     @contacts_count = results.size
     results
   end
@@ -184,13 +296,13 @@ class Api::V1::Accounts::ContactsController < Api::V1::Accounts::BaseController
   end
 
   def contact_custom_attributes
-    return @contact.custom_attributes.merge(permitted_params[:custom_attributes]) if permitted_params[:custom_attributes]
+    return @contact.custom_attributes.merge(permitted_params[:custom_attributes].to_unsafe_h) if permitted_params[:custom_attributes]
 
     @contact.custom_attributes
   end
 
   def contact_additional_attributes
-    return @contact.additional_attributes.merge(permitted_params[:additional_attributes]) if permitted_params[:additional_attributes]
+    return @contact.additional_attributes.merge(params[:additional_attributes].to_unsafe_h) if params[:additional_attributes].present?
 
     @contact.additional_attributes
   end

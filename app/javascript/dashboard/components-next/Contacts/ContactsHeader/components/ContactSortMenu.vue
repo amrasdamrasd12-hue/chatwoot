@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, toRef } from 'vue';
+import { ref, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import Button from 'dashboard/components-next/button/Button.vue';
@@ -22,7 +22,7 @@ const { t } = useI18n();
 
 const isMenuOpen = ref(false);
 
-const sortMenus = [
+const sortMenus = computed(() => [
   {
     label: t('CONTACTS_LAYOUT.HEADER.ACTIONS.SORT_BY.OPTIONS.NAME'),
     value: 'name',
@@ -51,9 +51,13 @@ const sortMenus = [
     label: t('CONTACTS_LAYOUT.HEADER.ACTIONS.SORT_BY.OPTIONS.CREATED_AT'),
     value: 'created_at',
   },
-];
+  {
+    label: t('CONTACTS_LAYOUT.HEADER.ACTIONS.SORT_BY.OPTIONS.UPDATED_AT'),
+    value: 'updated_at',
+  },
+]);
 
-const orderingMenus = [
+const orderingMenus = computed(() => [
   {
     label: t('CONTACTS_LAYOUT.HEADER.ACTIONS.ORDER.OPTIONS.ASCENDING'),
     value: '',
@@ -62,29 +66,29 @@ const orderingMenus = [
     label: t('CONTACTS_LAYOUT.HEADER.ACTIONS.ORDER.OPTIONS.DESCENDING'),
     value: '-',
   },
-];
-
-// Converted the props to refs for better reactivity
-const activeSort = toRef(props, 'activeSort');
-
-const activeOrdering = toRef(props, 'activeOrdering');
+]);
 
 const activeSortLabel = computed(() => {
-  const selectedMenu = sortMenus.find(menu => menu.value === activeSort.value);
+  const selectedMenu = sortMenus.value.find(
+    menu => menu.value === props.activeSort
+  );
   return (
     selectedMenu?.label || t('CONTACTS_LAYOUT.HEADER.ACTIONS.SORT_BY.LABEL')
   );
 });
 
 const activeOrderingLabel = computed(() => {
-  const selectedMenu = orderingMenus.find(
-    menu => menu.value === activeOrdering.value
+  const selectedMenu = orderingMenus.value.find(
+    menu => menu.value === props.activeOrdering
   );
   return selectedMenu?.label || t('CONTACTS_LAYOUT.HEADER.ACTIONS.ORDER.LABEL');
 });
 
+const DATE_SORT_FIELDS = ['created_at', 'last_activity_at', 'updated_at'];
+
 const handleSortChange = value => {
-  emit('update:sort', { sort: value, order: props.activeOrdering });
+  const order = DATE_SORT_FIELDS.includes(value) ? '-' : props.activeOrdering;
+  emit('update:sort', { sort: value, order });
 };
 
 const handleOrderChange = value => {

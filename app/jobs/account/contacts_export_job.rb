@@ -6,46 +6,20 @@ class Account::ContactsExportJob < ApplicationJob
     @params = params
     @account_user = @account.users.find(user_id)
 
-    headers = valid_headers(column_names)
-    generate_csv(headers)
+    export = Contacts::ExportBuilder.new(account: @account, user: @account_user, column_names: column_names, params: @params)
+    attach_export_file(export.generate)
     send_mail
   end
 
   private
 
-  def generate_csv(headers)
-    csv_data = CSV.generate do |csv|
-      csv << headers
-      contacts.each do |contact|
-        csv << headers.map { |header| contact.send(header) }
-      end
-    end
-
-    attach_export_file(csv_data)
-  end
-
-  def contacts
-    if @params.present? && @params[:payload].present? && @params[:payload].any?
-      result = ::Contacts::FilterService.new(@account, @account_user, @params).perform
-      result[:contacts]
-    elsif @params[:label].present?
-      @account.contacts.resolved_contacts(use_crm_v2: @account.feature_enabled?('crm_v2')).tagged_with(@params[:label], any: true)
-    else
-      @account.contacts.resolved_contacts(use_crm_v2: @account.feature_enabled?('crm_v2'))
-    end
-  end
-
-  def valid_headers(column_names)
-    (column_names.presence || default_columns) & Contact.column_names
-  end
-
-  def attach_export_file(csv_data)
-    return if csv_data.blank?
+  def attach_export_file(workbook_data)
+    return if workbook_data.blank?
 
     @account.contacts_export.attach(
-      io: StringIO.new(csv_data),
-      filename: "#{@account.name}_#{@account.id}_contacts.csv",
-      content_type: 'text/csv'
+      io: StringIO.new(workbook_data),
+      filename: "#{@account.name}_#{@account.id}_contacts.xlsx",
+      content_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
   end
 
@@ -57,9 +31,5 @@ class Account::ContactsExportJob < ApplicationJob
 
   def account_contact_export_url
     Rails.application.routes.url_helpers.rails_blob_url(@account.contacts_export)
-  end
-
-  def default_columns
-    %w[id name email phone_number]
   end
 end

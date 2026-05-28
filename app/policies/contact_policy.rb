@@ -11,6 +11,14 @@ class ContactPolicy < ApplicationPolicy
     @account_user.administrator?
   end
 
+  def import_template?
+    import?
+  end
+
+  def preview_import?
+    import?
+  end
+
   def export?
     @account_user.administrator?
   end
