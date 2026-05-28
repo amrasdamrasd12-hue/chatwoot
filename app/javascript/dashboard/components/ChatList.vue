@@ -134,6 +134,9 @@ const currentAccountId = useMapGetter('getCurrentAccountId');
 // We can't useFunctionGetter here since it needs to be called on setup?
 const getTeamFn = useMapGetter('teams/getTeam');
 const getConversationById = useMapGetter('getConversationById');
+// Eltafouk: needed so the header-level unread pill can show a folder-aware
+// count (sum of inbox_id values pulled out of the folder's saved query).
+const getInboxUnattendedCount = useMapGetter('inboxes/getUnattendedCount');
 
 useChatListKeyboardEvents(conversationListRef);
 const {
@@ -399,6 +402,28 @@ const unreadCountInCurrentView = computed(() => {
     return stats.unreadUnAssignedCount || 0;
   }
   return stats.unreadAllCount || 0;
+});
+
+// Eltafouk: unread count for the active custom-view folder. We extract the
+// inbox_id values directly from the saved filter payload and sum each
+// inbox's unattended count — matches what the sidebar shows for
+// "التعليقات" (548) instead of the account-wide unread total that the
+// generic `unreadAllCount` would surface.
+const folderUnreadCount = computed(() => {
+  if (!hasActiveFolders.value) return 0;
+  const payload = activeFolder.value?.query?.payload || [];
+  const inboxIds = new Set();
+  payload.forEach(clause => {
+    if (clause?.attribute_key === 'inbox_id') {
+      (clause.values || []).forEach(id => inboxIds.add(Number(id)));
+    }
+  });
+  if (inboxIds.size === 0) return 0;
+  let total = 0;
+  inboxIds.forEach(id => {
+    total += getInboxUnattendedCount.value(id) || 0;
+  });
+  return total;
 });
 
 const showEndOfListMessage = computed(() => {
@@ -1014,11 +1039,14 @@ watch(conversationFilters, (newVal, oldVal) => {
       :is-on-expanded-layout="isOnExpandedLayout"
       :conversation-stats="conversationStats"
       :is-list-loading="chatListLoading && !conversationList.length"
+      :folder-unread-count="folderUnreadCount"
+      :folder-unread-active="showUnreadOnly"
       @add-folders="onClickOpenAddFoldersModal"
       @delete-folders="onClickOpenDeleteFoldersModal"
       @filters-modal="onToggleAdvanceFiltersModal"
       @reset-filters="resetAndFetchData"
       @basic-filter-change="onBasicFilterChange"
+      @toggle-folder-unread="showUnreadOnly = !showUnreadOnly"
     />
 
     <TeleportWithDirection
@@ -1042,18 +1070,17 @@ watch(conversationFilters, (newVal, oldVal) => {
       @close="onCloseDeleteFoldersModal"
     />
 
-    <div v-if="!hasAppliedFilters" class="flex items-center gap-2 px-3">
+    <div
+      v-if="!hasAppliedFiltersOrActiveFolders"
+      class="flex items-center gap-2 px-3"
+    >
       <ChatTypeTabs
-        v-if="!hasActiveFolders"
         :items="assigneeTabItems"
         :active-tab="activeAssigneeTab"
         is-compact
         class="flex-1"
         @chat-tab-change="updateAssigneeTab"
       />
-      <!-- Eltafouk: in folder/custom-view mode there are no assignee tabs to
-           split the row, so let the unread pill stretch to fill the bar. -->
-      <div v-else class="flex-1" />
       <!-- Eltafouk: elevated unread filter. Badge shows the true
            server-side unread total for the current scope (matches the
            count the sidebar displays on the same inbox), so the agent

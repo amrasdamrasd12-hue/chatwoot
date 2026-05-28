@@ -18,6 +18,11 @@ const props = defineProps({
   isOnExpandedLayout: { type: Boolean, required: true },
   conversationStats: { type: Object, required: true },
   isListLoading: { type: Boolean, required: true },
+  // Eltafouk: folder-scoped unread filter pill lives in the header instead
+  // of below the title row, so it sits where the (removed) trash icon used
+  // to be when a custom view is active.
+  folderUnreadCount: { type: Number, default: 0 },
+  folderUnreadActive: { type: Boolean, default: false },
 });
 
 const emit = defineEmits([
@@ -25,6 +30,7 @@ const emit = defineEmits([
   'resetFilters',
   'basicFilterChange',
   'filtersModal',
+  'toggleFolderUnread',
 ]);
 
 const channelColor = computed(() => {
@@ -148,6 +154,30 @@ const toggleConversationLayout = () => {
         />
       </template>
       <template v-if="hasActiveFolders">
+        <!-- Eltafouk: folder unread filter — same visual style as the inbox
+             pill, sits beside the edit pencil (where the now-removed trash
+             button used to be). Count comes pre-summed from ChatList based
+             on the folder's inbox_id values. -->
+        <button
+          type="button"
+          class="group/unread relative inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-full text-[10px] font-semibold transition-all duration-200 ease-out ring-1 active:scale-[0.97]"
+          :class="[
+            folderUnreadActive
+              ? 'bg-n-slate-12 text-white ring-n-slate-12 shadow-[0_2px_8px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.18)] ps-2 pe-1.5'
+              : 'bg-white text-n-slate-12 ring-n-alpha-2 hover:ring-n-slate-7 hover:bg-n-alpha-1 shadow-sm ps-2 pe-1.5',
+            folderUnreadCount === 0 ? 'pe-2' : '',
+          ]"
+          @click="emit('toggleFolderUnread')"
+        >
+          <fluent-icon icon="mail-unread" size="10" />
+          <span>{{ $t('CHAT_LIST.UNREAD') }}</span>
+          <span
+            v-if="folderUnreadCount > 0"
+            class="inline-flex h-[18px] min-w-[26px] items-center justify-center rounded-full bg-[#DC2626] px-1.5 text-[10px] font-bold leading-none tabular-nums text-white animate-unread-glow ring-1 ring-inset ring-white/10"
+          >
+            {{ folderUnreadCount }}
+          </span>
+        </button>
         <div class="relative">
           <NextButton
             id="toggleConversationFilterButton"
