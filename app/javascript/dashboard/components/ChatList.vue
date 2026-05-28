@@ -1042,17 +1042,18 @@ watch(conversationFilters, (newVal, oldVal) => {
       @close="onCloseDeleteFoldersModal"
     />
 
-    <div
-      v-if="!hasAppliedFiltersOrActiveFolders"
-      class="flex items-center gap-2 px-3"
-    >
+    <div v-if="!hasAppliedFilters" class="flex items-center gap-2 px-3">
       <ChatTypeTabs
+        v-if="!hasActiveFolders"
         :items="assigneeTabItems"
         :active-tab="activeAssigneeTab"
         is-compact
         class="flex-1"
         @chat-tab-change="updateAssigneeTab"
       />
+      <!-- Eltafouk: in folder/custom-view mode there are no assignee tabs to
+           split the row, so let the unread pill stretch to fill the bar. -->
+      <div v-else class="flex-1" />
       <!-- Eltafouk: elevated unread filter. Badge shows the true
            server-side unread total for the current scope (matches the
            count the sidebar displays on the same inbox), so the agent
