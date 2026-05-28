@@ -196,6 +196,7 @@ Rails.application.routes.draw do
               get :import_template
               post :filter
               post :import
+              post :preview_import
               post :export
             end
             member do

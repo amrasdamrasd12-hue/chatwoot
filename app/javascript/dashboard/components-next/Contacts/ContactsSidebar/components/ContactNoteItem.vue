@@ -30,7 +30,7 @@ const emit = defineEmits(['delete']);
 const noteContentRef = useTemplateRef('noteContentRef');
 const needsCollapse = ref(false);
 const [isExpanded, toggleExpanded] = useToggle();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const { formatMessage } = useMessageFormatter();
 
 const handleDelete = () => {
@@ -62,11 +62,14 @@ onMounted(() => {
           rounded-full
         />
         <div class="min-w-0 truncate">
-          <span class="inline-flex items-center gap-1 text-sm text-n-slate-11">
+          <span
+            dir="auto"
+            class="inline-flex items-center gap-1 text-sm text-n-slate-11"
+          >
             <span class="font-medium text-n-slate-12">{{ writtenBy }}</span>
             {{ t('CONTACTS_LAYOUT.SIDEBAR.NOTES.WROTE') }}
             <span class="font-medium text-n-slate-12">
-              {{ dynamicTime(note.createdAt) }}
+              {{ dynamicTime(note.createdAt, locale) }}
             </span>
           </span>
         </div>

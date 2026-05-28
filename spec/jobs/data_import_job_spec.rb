@@ -33,12 +33,12 @@ RSpec.describe DataImportJob do
   describe 'importing data' do
     context 'when the data is valid' do
       it 'imports data into the account' do
-        csv_length = CSV.parse(data_import.import_file.download, headers: true).length
+        rows = xlsx_rows(data_import.import_file.download)
 
         described_class.perform_now(data_import)
-        expect(data_import.account.contacts.count).to eq(csv_length)
-        expect(data_import.reload.total_records).to eq(csv_length)
-        expect(data_import.reload.processed_records).to eq(csv_length)
+        expect(data_import.account.contacts.count).to eq(rows.length)
+        expect(data_import.reload.total_records).to eq(rows.length)
+        expect(data_import.reload.processed_records).to eq(rows.length)
         contact = Contact.find_by(phone_number: '+918080808080')
         expect(contact).to be_truthy
         expect(contact['additional_attributes']['company']).to eq('My Company Name')
@@ -55,41 +55,43 @@ RSpec.describe DataImportJob do
           ['3', 'Nancey', 'Windibank', 'cuzzell0@mozilla.org', '+91848484848']
         ]
 
-        invalid_data_import = create(:data_import, import_file: generate_csv_file(invalid_data))
-        csv_data = CSV.parse(invalid_data_import.import_file.download, headers: true)
-        csv_length = csv_data.length
+        invalid_data_import = create(:data_import, import_file: generate_xlsx_file(invalid_data))
+        rows = xlsx_rows(invalid_data_import.import_file.download)
 
         described_class.perform_now(invalid_data_import)
-        expect(invalid_data_import.account.contacts.count).to eq(csv_length - 1)
-        expect(invalid_data_import.reload.total_records).to eq(csv_length)
-        expect(invalid_data_import.reload.processed_records).to eq(csv_length)
+        expect(invalid_data_import.account.contacts.count).to eq(rows.length - 1)
+        expect(invalid_data_import.reload.total_records).to eq(rows.length)
+        expect(invalid_data_import.reload.processed_records).to eq(rows.length)
       end
 
       it 'will preserve emojis' do
-        data_import = create(:data_import,
-                             import_file: Rack::Test::UploadedFile.new(Rails.root.join('spec/fixtures/data_import/with_emoji.csv'),
-                                                                       'text/csv'))
-        csv_data = CSV.parse(data_import.import_file.download, headers: true)
-        csv_length = csv_data.length
+        emoji_data = [
+          %w[id name email phone_number],
+          ['1', 'T 🏠 🔥 Test', 'emoji@example.com', '+918080808088']
+        ]
+        data_import = create(:data_import, import_file: generate_xlsx_file(emoji_data))
+        rows = xlsx_rows(data_import.import_file.download)
 
         described_class.perform_now(data_import)
-        expect(data_import.account.contacts.count).to eq(csv_length)
+        expect(data_import.account.contacts.count).to eq(rows.length)
 
         expect(data_import.account.contacts.first.name).to eq('T 🏠 🔥 Test')
       end
 
-      it 'will not throw error for non utf-8 characters' do
-        invalid_data_import = create(:data_import,
-                                     import_file: Rack::Test::UploadedFile.new(Rails.root.join('spec/fixtures/data_import/invalid_bytes.csv'),
-                                                                               'text/csv'))
-        csv_data = CSV.parse(invalid_data_import.import_file.download, headers: true)
-        csv_length = csv_data.length
+      it 'will preserve Arabic text' do
+        arabic_data = [
+          %w[id name email phone_number company],
+          ['1', 'أحمد علي', 'ahmed@example.com', '+918080808089', 'شركة الاختبار']
+        ]
+        arabic_data_import = create(:data_import, import_file: generate_xlsx_file(arabic_data))
+        rows = xlsx_rows(arabic_data_import.import_file.download)
 
-        described_class.perform_now(invalid_data_import)
-        expect(invalid_data_import.account.contacts.count).to eq(csv_length)
+        described_class.perform_now(arabic_data_import)
+        expect(arabic_data_import.account.contacts.count).to eq(rows.length)
 
-        expect(invalid_data_import.account.contacts.first.name).to eq(csv_data[0]['name'].encode('UTF-8', 'binary', invalid: :replace,
-                                                                                                                    undef: :replace, replace: ''))
+        contact = arabic_data_import.account.contacts.first
+        expect(contact.name).to eq('أحمد علي')
+        expect(contact.additional_attributes['company']).to eq('شركة الاختبار')
       end
     end
 
@@ -102,71 +104,69 @@ RSpec.describe DataImportJob do
           ['3', 'Nancey Windibank', 'nwindibank2@bluehost.com', '+918080808082', 'Acmecorp']
         ]
       end
-      let(:existing_data_import) { create(:data_import, import_file: generate_csv_file(existing_data)) }
-      let(:csv_data) { CSV.parse(existing_data_import.import_file.download, headers: true) }
+      let(:existing_data_import) { create(:data_import, import_file: generate_xlsx_file(existing_data)) }
+      let(:rows) { xlsx_rows(existing_data_import.import_file.download) }
 
       context 'when the existing record has an email in import data' do
         it 'updates the existing record with new data' do
-          contact = Contact.create!(email: csv_data[0]['email'], account_id: existing_data_import.account_id)
+          contact = Contact.create!(email: rows[0]['email'], account_id: existing_data_import.account_id)
           expect(contact.reload.phone_number).to be_nil
 
-          csv_length = csv_data.length
-
           described_class.perform_now(existing_data_import)
-          expect(existing_data_import.account.contacts.count).to eq(csv_length)
-          contact = Contact.from_email(csv_data[0]['email'])
+          expect(existing_data_import.account.contacts.count).to eq(rows.length)
+          contact = Contact.from_email(rows[0]['email'])
           expect(contact).to be_present
-          expect(contact.phone_number).to eq("+#{csv_data[0]['phone_number']}")
-          expect(contact.name).to eq((csv_data[0]['name']).to_s)
-          expect(contact.additional_attributes['company']).to eq((csv_data[0]['company']).to_s)
+          expect(contact.phone_number).to eq("+#{rows[0]['phone_number']}")
+          expect(contact.name).to eq((rows[0]['name']).to_s)
+          expect(contact.additional_attributes['company']).to eq((rows[0]['company']).to_s)
         end
       end
 
       context 'when the existing record has a phone_number in import data' do
         it 'updates the existing record with new data' do
-          contact = Contact.create!(account_id: existing_data_import.account_id, phone_number: csv_data[1]['phone_number'])
+          contact = Contact.create!(account_id: existing_data_import.account_id, phone_number: rows[1]['phone_number'])
           expect(contact.reload.email).to be_nil
-          csv_length = csv_data.length
 
           described_class.perform_now(existing_data_import)
-          expect(existing_data_import.account.contacts.count).to eq(csv_length)
+          expect(existing_data_import.account.contacts.count).to eq(rows.length)
 
-          contact = Contact.find_by(phone_number: "+#{csv_data[0]['phone_number']}")
+          contact = Contact.find_by(phone_number: "+#{rows[0]['phone_number']}")
           expect(contact).to be_present
-          expect(contact.email).to eq(csv_data[0]['email'])
-          expect(contact.name).to eq((csv_data[0]['name']).to_s)
-          expect(contact.additional_attributes['company']).to eq((csv_data[0]['company']).to_s)
+          expect(contact.email).to eq(rows[0]['email'])
+          expect(contact.name).to eq((rows[0]['name']).to_s)
+          expect(contact.additional_attributes['company']).to eq((rows[0]['company']).to_s)
         end
       end
 
       context 'when the existing record has both email and phone_number in import data' do
         it 'skips importing the records' do
-          phone_contact = Contact.create!(account_id: existing_data_import.account_id, phone_number: csv_data[1]['phone_number'])
-          email_contact = Contact.create!(account_id: existing_data_import.account_id, email: csv_data[1]['email'])
-
-          csv_length = csv_data.length
+          phone_contact = Contact.create!(account_id: existing_data_import.account_id, phone_number: rows[1]['phone_number'])
+          email_contact = Contact.create!(account_id: existing_data_import.account_id, email: rows[1]['email'])
 
           described_class.perform_now(existing_data_import)
           expect(phone_contact.reload.email).to be_nil
           expect(email_contact.reload.phone_number).to be_nil
-          expect(existing_data_import.total_records).to eq(csv_length)
-          expect(existing_data_import.processed_records).to eq(csv_length - 1)
+          expect(existing_data_import.total_records).to eq(rows.length)
+          expect(existing_data_import.processed_records).to eq(rows.length - 1)
         end
       end
     end
 
-    context 'when the CSV file is invalid' do
-      let(:invalid_csv_content) do
-        "id,name,email,phone_number,company\n1,\"Clarice Uzzell,\"missing_quote,918080808080,Acmecorp\n2,Marieann Creegan,,+918080808081,Acmecorp"
-      end
+    context 'when the Excel file is invalid' do
+      let(:invalid_workbook_content) { 'not an excel workbook' }
 
       before do
+        temp_file = Tempfile.new(['invalid_contacts', '.xlsx'])
+        temp_file.binmode
+        temp_file.write(invalid_workbook_content)
+        temp_file.rewind
+
         import_file_double = instance_double(ActiveStorage::Blob)
         allow(data_import).to receive(:import_file).and_return(import_file_double)
-        allow(import_file_double).to receive(:open).and_yield(StringIO.new(invalid_csv_content))
+        allow(import_file_double).to receive(:open).and_yield(temp_file)
       end
 
-      it 'does not import any data and handles the MalformedCSVError' do
+      it 'does not import any data and marks the import as failed' do
         expect { described_class.perform_now(data_import) }
           .to change { data_import.reload.status }.from('pending').to('failed')
       end

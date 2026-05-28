@@ -63,6 +63,7 @@ class ContactInboxWithContactBuilder
     contact = find_contact_by_identifier(contact_attributes[:identifier])
     contact ||= find_contact_by_email(contact_attributes[:email])
     contact ||= find_contact_by_phone_number(contact_attributes[:phone_number])
+    contact ||= find_contact_by_secondary_phone(contact_attributes[:phone_number])
     contact ||= find_contact_by_instagram_source_id(source_id) if instagram_channel?
 
     contact
@@ -106,5 +107,28 @@ class ContactInboxWithContactBuilder
     return if phone_number.blank?
 
     account.contacts.find_by(phone_number: phone_number)
+  end
+
+  # Match phones in the custom_customer_mobile_numbers array (new format) and
+  # legacy flat phone_secondary / phone_alternative fields (old format).
+  # Compares last 10 digits so "+201011111111" and "01011111111" match.
+  def find_contact_by_secondary_phone(phone_number)
+    return if phone_number.blank?
+
+    suffix = phone_number.last(10)
+    contact = account.contacts.where(
+      "EXISTS (
+        SELECT 1 FROM jsonb_array_elements(
+          COALESCE(additional_attributes->'custom_customer_mobile_numbers', '[]'::jsonb)
+        ) AS mob WHERE RIGHT(mob->>'phone', 10) = :suffix
+      )",
+      suffix: suffix
+    ).first
+    contact ||= account.contacts.where(
+      "RIGHT(additional_attributes->>'phone_secondary', 10) = :suffix
+       OR RIGHT(additional_attributes->>'phone_alternative', 10) = :suffix",
+      suffix: suffix
+    ).first
+    contact
   end
 end

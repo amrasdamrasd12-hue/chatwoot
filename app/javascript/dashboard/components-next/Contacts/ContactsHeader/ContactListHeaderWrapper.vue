@@ -9,6 +9,7 @@ import filterQueryGenerator from 'dashboard/helper/filterQueryGenerator';
 import contactFilterItems from 'dashboard/routes/dashboard/contacts/contactFilterItems';
 import {
   DuplicateContactException,
+  DuplicatePhoneException,
   ExceptionWithMessage,
 } from 'shared/helpers/CustomErrors';
 import { generateValuesForEditCustomViews } from 'dashboard/helper/customViewsHelper';
@@ -18,6 +19,7 @@ import {
   useSnakeCase,
 } from 'dashboard/composables/useTransformKeys';
 
+import Dialog from 'dashboard/components-next/dialog/Dialog.vue';
 import ContactsHeader from 'dashboard/components-next/Contacts/ContactsHeader/ContactHeader.vue';
 import CreateNewContactDialog from 'dashboard/components-next/Contacts/ContactsForm/CreateNewContactDialog.vue';
 import ContactExportDialog from 'dashboard/components-next/Contacts/ContactsForm/ContactExportDialog.vue';
@@ -37,6 +39,9 @@ const props = defineProps({
   hasAppliedFilters: { type: Boolean, default: false },
   isLabelView: { type: Boolean, default: false },
   isActiveView: { type: Boolean, default: false },
+  viewMode: { type: String, default: 'table' },
+  showViewToggle: { type: Boolean, default: true },
+  selectedContactIds: { type: Array, default: () => [] },
 });
 
 const emit = defineEmits([
@@ -44,6 +49,8 @@ const emit = defineEmits([
   'search',
   'applyFilter',
   'clearFilters',
+  'update:viewMode',
+  'contactCreated',
 ]);
 
 const { t } = useI18n();
@@ -55,6 +62,8 @@ const contactExportDialogRef = ref(null);
 const contactImportDialogRef = ref(null);
 const createSegmentDialogRef = ref(null);
 const deleteSegmentDialogRef = ref(null);
+const phoneDuplicateDialogRef = ref(null);
+const phoneDuplicateMessage = ref('');
 
 const showFiltersModal = ref(false);
 const appliedFilter = ref([]);
@@ -80,16 +89,34 @@ const openCreateSegmentDialog = () =>
 const openDeleteSegmentDialog = () =>
   deleteSegmentDialogRef.value?.dialogRef.open();
 
+const parsedPhoneDuplicate = computed(() => {
+  const msg = phoneDuplicateMessage.value;
+  if (!msg) return { phone: '', contactName: '' };
+  const parts = msg.split(' is already assigned to contact: ');
+  return {
+    phone: parts[0]?.replace('Phone ', '').trim() || '',
+    contactName: parts[1]?.trim() || '',
+  };
+});
+
+const showPhoneDuplicateDialog = message => {
+  phoneDuplicateMessage.value = message;
+  phoneDuplicateDialogRef.value?.open();
+};
+
 const onCreate = async contact => {
   try {
     await store.dispatch('contacts/create', contact);
     createNewContactDialogRef.value?.onSuccess();
+    emit('contactCreated');
     useAlert(
       t('CONTACTS_LAYOUT.HEADER.ACTIONS.CONTACT_CREATION.SUCCESS_MESSAGE')
     );
   } catch (error) {
     const i18nPrefix = 'CONTACTS_LAYOUT.HEADER.ACTIONS.CONTACT_CREATION';
-    if (error instanceof DuplicateContactException) {
+    if (error instanceof DuplicatePhoneException) {
+      showPhoneDuplicateDialog(error.data);
+    } else if (error instanceof DuplicateContactException) {
       if (error.data.includes('email')) {
         useAlert(t(`${i18nPrefix}.EMAIL_ADDRESS_DUPLICATE`));
       } else if (error.data.includes('phone_number')) {
@@ -105,12 +132,15 @@ const onCreate = async contact => {
 
 const onImport = async file => {
   try {
-    await store.dispatch('contacts/import', file);
+    const result = await store.dispatch('contacts/import', file);
     contactImportDialogRef.value?.dialogRef.close();
     useAlert(
-      t('CONTACTS_LAYOUT.HEADER.ACTIONS.IMPORT_CONTACT.SUCCESS_MESSAGE')
+      t('CONTACTS_LAYOUT.HEADER.ACTIONS.IMPORT_CONTACT.SUCCESS_MESSAGE', {
+        count: result?.processed_records ?? 0,
+      })
     );
     useTrack(CONTACTS_EVENTS.IMPORT_SUCCESS);
+    emit('clearFilters');
   } catch (error) {
     useAlert(
       error.message ??
@@ -123,6 +153,7 @@ const onImport = async file => {
 const onExport = async query => {
   try {
     await store.dispatch('contacts/export', query);
+    contactExportDialogRef.value?.dialogRef.close();
     useAlert(
       t('CONTACTS_LAYOUT.HEADER.ACTIONS.EXPORT_CONTACT.SUCCESS_MESSAGE')
     );
@@ -267,6 +298,7 @@ const onToggleFilters = () => {
 
 defineExpose({
   onToggleFilters,
+  openContactExportDialog,
 });
 </script>
 
@@ -281,6 +313,8 @@ defineExpose({
     :is-label-view="isLabelView"
     :is-active-view="isActiveView"
     :has-active-filters="hasAppliedFilters"
+    :view-mode="viewMode"
+    :show-view-toggle="showViewToggle"
     :button-label="t('CONTACTS_LAYOUT.HEADER.MESSAGE_BUTTON')"
     @search="emit('search', $event)"
     @update:sort="emit('update:sort', $event)"
@@ -290,6 +324,7 @@ defineExpose({
     @filter="onToggleFilters"
     @create-segment="openCreateSegmentDialog"
     @delete-segment="openDeleteSegmentDialog"
+    @update:view-mode="emit('update:viewMode', $event)"
   >
     <template #filter>
       <div
@@ -310,8 +345,86 @@ defineExpose({
   </ContactsHeader>
 
   <CreateNewContactDialog ref="createNewContactDialogRef" @create="onCreate" />
-  <ContactExportDialog ref="contactExportDialogRef" @export="onExport" />
+  <ContactExportDialog
+    ref="contactExportDialogRef"
+    :selected-contact-ids="selectedContactIds"
+    @export="onExport"
+  />
   <ContactImportDialog ref="contactImportDialogRef" @import="onImport" />
   <CreateSegmentDialog ref="createSegmentDialogRef" @create="onCreateSegment" />
   <DeleteSegmentDialog ref="deleteSegmentDialogRef" @delete="onDeleteSegment" />
+
+  <Dialog
+    ref="phoneDuplicateDialogRef"
+    :show-cancel-button="false"
+    :show-confirm-button="false"
+    width="sm"
+  >
+    <div class="flex flex-col items-center gap-5 py-2 text-center">
+      <div
+        class="flex items-center justify-center rounded-full size-16 bg-n-ruby-4"
+      >
+        <span class="i-lucide-phone-off size-8 text-n-ruby-11" />
+      </div>
+
+      <div class="space-y-1">
+        <h3 class="text-base font-semibold text-n-slate-12">
+          {{
+            t(
+              'CONTACTS_LAYOUT.HEADER.ACTIONS.CONTACT_CREATION.DUPLICATE_PHONE_TITLE'
+            )
+          }}
+        </h3>
+        <p class="text-sm text-n-slate-10">
+          {{
+            t(
+              'CONTACTS_LAYOUT.HEADER.ACTIONS.CONTACT_CREATION.DUPLICATE_PHONE_SUBTITLE'
+            )
+          }}
+        </p>
+      </div>
+
+      <div
+        class="flex items-center justify-center w-full gap-2 px-4 py-3 rounded-xl bg-n-alpha-2 border border-n-weak"
+      >
+        <span class="i-lucide-phone size-4 text-n-slate-10 shrink-0" />
+        <span
+          dir="ltr"
+          class="font-mono text-sm font-semibold tracking-wide text-n-slate-12"
+        >
+          {{ parsedPhoneDuplicate.phone }}
+        </span>
+      </div>
+
+      <div
+        class="flex items-center w-full gap-3 px-4 py-3 rounded-xl bg-n-ruby-3 border border-n-ruby-5"
+      >
+        <span class="i-lucide-user size-4 text-n-ruby-11 shrink-0" />
+        <div class="text-start min-w-0">
+          <p class="text-xs text-n-ruby-10">
+            {{
+              t(
+                'CONTACTS_LAYOUT.HEADER.ACTIONS.CONTACT_CREATION.DUPLICATE_PHONE_ASSIGNED_TO'
+              )
+            }}
+          </p>
+          <p class="text-sm font-semibold truncate text-n-ruby-12">
+            {{ parsedPhoneDuplicate.contactName }}
+          </p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        class="w-full px-4 py-2.5 text-sm font-semibold text-white transition-colors rounded-lg bg-n-ruby-9 hover:bg-n-ruby-10"
+        @click="phoneDuplicateDialogRef?.close()"
+      >
+        {{
+          t(
+            'CONTACTS_LAYOUT.HEADER.ACTIONS.CONTACT_CREATION.DUPLICATE_PHONE_DISMISS'
+          )
+        }}
+      </button>
+    </div>
+  </Dialog>
 </template>

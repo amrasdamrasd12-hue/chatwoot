@@ -188,15 +188,19 @@ RSpec.describe 'Contacts API', type: :request do
     context 'when it is an authenticated user' do
       let(:admin) { create(:user, account: account, role: :administrator) }
 
-      it 'creates a data import' do
-        file = fixture_file_upload(Rails.root.join('spec/assets/contacts.csv'), 'text/csv')
-        post "/api/v1/accounts/#{account.id}/contacts/import",
-             headers: admin.create_new_auth_token,
-             params: { import_file: file }
+      it 'imports contacts immediately' do
+        file = generate_xlsx_file([
+                                    %w[name email phone_number],
+                                    ['Clarice Uzzell', 'cuzzell0@mozilla.org', '+918080808080']
+                                  ])
+        expect do
+          post "/api/v1/accounts/#{account.id}/contacts/import",
+               headers: admin.create_new_auth_token,
+               params: { import_file: file }
+        end.to change { account.contacts.count }.by(1)
 
         expect(response).to have_http_status(:success)
-        expect(account.data_imports.count).to eq(1)
-        expect(account.data_imports.first.import_file.attached?).to be(true)
+        expect(response.parsed_body['payload']).to include('processed_records' => 1, 'rejected_records' => 0, 'total_records' => 1)
       end
     end
 
@@ -211,6 +215,50 @@ RSpec.describe 'Contacts API', type: :request do
 
         expect(response).to have_http_status(:unprocessable_entity)
         expect(json_response['error']).to eq('File is blank')
+      end
+    end
+  end
+
+  describe 'GET /api/v1/accounts/{account.id}/contacts/import_template' do
+    context 'when it is an authenticated user' do
+      let(:admin) { create(:user, account: account, role: :administrator) }
+
+      it 'downloads an Excel template with selected columns' do
+        get "/api/v1/accounts/#{account.id}/contacts/import_template",
+            headers: admin.create_new_auth_token,
+            params: { column_names: %w[name email phone_number] }
+
+        expect(response).to have_http_status(:success)
+        expect(response.headers['Content-Type']).to include(Contacts::ImportTemplateBuilder::CONTENT_TYPE)
+        rows = xlsx_rows(response.body)
+        expect(rows.first.keys).to eq(%w[name email phone_number])
+      end
+    end
+  end
+
+  describe 'POST /api/v1/accounts/{account.id}/contacts/preview_import' do
+    context 'when it is an authenticated user' do
+      let(:admin) { create(:user, account: account, role: :administrator) }
+
+      it 'returns the first rows from an Excel file' do
+        file = generate_xlsx_file([
+                                    %w[name email phone_number],
+                                    ['Ahmed Mohamed', 'ahmed@example.com', '+201155998008'],
+                                    ['Fatoma', 'fatoma@example.com', '+201006286187']
+                                  ])
+
+        post "/api/v1/accounts/#{account.id}/contacts/preview_import",
+             headers: admin.create_new_auth_token,
+             params: { import_file: file }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body['payload']).to include(
+          'headers' => %w[name email phone_number],
+          'rows' => [
+            ['Ahmed Mohamed', 'ahmed@example.com', '+201155998008'],
+            ['Fatoma', 'fatoma@example.com', '+201006286187']
+          ]
+        )
       end
     end
   end
@@ -239,38 +287,57 @@ RSpec.describe 'Contacts API', type: :request do
     context 'when it is an authenticated user' do
       let(:admin) { create(:user, account: account, role: :administrator) }
 
-      it 'enqueues a contact export job' do
-        expect(Account::ContactsExportJob).to receive(:perform_later).with(account.id, admin.id, nil, { :payload => nil, :label => nil }).once
+      let!(:contact) { create(:contact, :with_email, account: account, phone_number: '+15551234567') }
 
+      before { create(:contact_inbox, contact: contact) }
+
+      it 'downloads a contacts Excel file immediately' do
         post "/api/v1/accounts/#{account.id}/contacts/export",
              headers: admin.create_new_auth_token
 
         expect(response).to have_http_status(:success)
+        expect(response.headers['Content-Type']).to include(Contacts::ExportBuilder::CONTENT_TYPE)
+        expect(response.headers['Content-Disposition']).to include('.xlsx')
+        rows = xlsx_rows(response.body)
+        expect(rows.first).to include('email' => contact.email)
       end
 
-      it 'enqueues a contact export job with sent_columns' do
-        expect(Account::ContactsExportJob).to receive(:perform_later).with(account.id, admin.id, %w[phone_number email],
-                                                                           { :payload => nil, :label => nil }).once
-
+      it 'downloads a contacts Excel file with sent columns' do
         post "/api/v1/accounts/#{account.id}/contacts/export",
              headers: admin.create_new_auth_token,
              params: { column_names: %w[phone_number email] }
 
         expect(response).to have_http_status(:success)
+        rows = xlsx_rows(response.body)
+        expect(rows.first.keys).to eq(%w[phone_number email])
+        expect(rows.first).to include('phone_number' => contact.phone_number, 'email' => contact.email)
       end
 
-      it 'enqueues a contact export job with payload' do
-        expect(Account::ContactsExportJob).to receive(:perform_later).with(account.id, admin.id, nil,
-                                                                           {
-                                                                             :payload => [ActionController::Parameters.new(email_filter).permit!],
-                                                                             :label => nil
-                                                                           }).once
+      it 'downloads only selected contacts when selected ids are sent' do
+        other_contact = create(:contact, :with_email, account: account)
+        create(:contact_inbox, contact: other_contact)
+
+        post "/api/v1/accounts/#{account.id}/contacts/export",
+             headers: admin.create_new_auth_token,
+             params: { selected_ids: [contact.id], column_names: %w[id email] }
+
+        expect(response).to have_http_status(:success)
+        rows = xlsx_rows(response.body)
+        expect(rows.pluck('id')).to contain_exactly(contact.id.to_s)
+        expect(rows.pluck('email')).to contain_exactly(contact.email)
+      end
+
+      it 'downloads a contacts Excel file with payload' do
+        matching_contact = create(:contact, :with_email, account: account, email: 'looped@example.com')
+        create(:contact_inbox, contact: matching_contact)
 
         post "/api/v1/accounts/#{account.id}/contacts/export",
              headers: admin.create_new_auth_token,
              params: { payload: [email_filter] }
 
         expect(response).to have_http_status(:success)
+        rows = xlsx_rows(response.body)
+        expect(rows.pluck('email')).to contain_exactly(matching_contact.email)
       end
     end
   end

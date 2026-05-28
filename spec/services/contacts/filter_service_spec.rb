@@ -294,6 +294,63 @@ describe Contacts::FilterService do
       end
     end
 
+    context 'with custom classification (additional_attributes)' do
+      let!(:library_contact) do
+        create(:contact, account: account, email: 'lib@example.com',
+                         additional_attributes: { 'custom_customer_classification' => 'Library' })
+      end
+      let!(:student_contact) do
+        create(:contact, account: account, email: 'stu@example.com',
+                         additional_attributes: { 'custom_customer_classification' => 'Student' })
+      end
+
+      it 'filters by customer classification (case-insensitive)' do
+        params[:payload] = [{
+          attribute_key: 'custom_customer_classification',
+          filter_operator: 'equal_to',
+          values: ['library'],
+          query_operator: nil
+        }.with_indifferent_access]
+        result = filter_service.new(account, first_user, params).perform
+        expect(result[:contacts].map(&:id)).to contain_exactly(library_contact.id)
+      end
+    end
+
+    context 'with jsonb_array attributes (address governorate)' do
+      let!(:cairo_contact) do
+        create(:contact, account: account, email: 'cairo@example.com', additional_attributes: {
+                 'custom_addresses' => [{ 'governorate' => 'القاهرة', 'district' => 'مدينة نصر' }]
+               })
+      end
+      let!(:giza_contact) do
+        create(:contact, account: account, email: 'giza@example.com', additional_attributes: {
+                 'custom_addresses' => [{ 'governorate' => 'الجيزة', 'district' => 'الدقي' }]
+               })
+      end
+
+      it 'filters contacts whose custom_addresses array contains the given governorate' do
+        params[:payload] = [{
+          attribute_key: 'address_governorate',
+          filter_operator: 'equal_to',
+          values: ['القاهرة'],
+          query_operator: nil
+        }.with_indifferent_access]
+        result = filter_service.new(account, first_user, params).perform
+        expect(result[:contacts].map(&:id)).to contain_exactly(cairo_contact.id)
+      end
+
+      it 'filters contacts whose custom_addresses array contains the given district' do
+        params[:payload] = [{
+          attribute_key: 'address_district',
+          filter_operator: 'equal_to',
+          values: ['الدقي'],
+          query_operator: nil
+        }.with_indifferent_access]
+        result = filter_service.new(account, first_user, params).perform
+        expect(result[:contacts].map(&:id)).to contain_exactly(giza_contact.id)
+      end
+    end
+
     context 'with custom attributes' do
       it 'filter by custom_attributes and labels' do
         params[:payload] = [

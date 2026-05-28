@@ -6,10 +6,9 @@ import CardLayout from 'dashboard/components-next/CardLayout.vue';
 import ContactsForm from 'dashboard/components-next/Contacts/ContactsForm/ContactsForm.vue';
 import Button from 'dashboard/components-next/button/Button.vue';
 import Avatar from 'dashboard/components-next/avatar/Avatar.vue';
-import Flag from 'dashboard/components-next/flag/Flag.vue';
 import ContactDeleteSection from 'dashboard/components-next/Contacts/ContactsCard/ContactDeleteSection.vue';
 import Checkbox from 'dashboard/components-next/checkbox/Checkbox.vue';
-import countries from 'shared/constants/countries';
+import { getClassificationBadgeClass } from 'dashboard/helper/contactsClassificationColors';
 
 const props = defineProps({
   id: { type: Number, required: true },
@@ -49,39 +48,40 @@ const contactData = ref(getInitialContactData());
 
 const isFormInvalid = computed(() => contactsFormRef.value?.isFormInvalid);
 
-const countriesMap = computed(() => {
-  return countries.reduce((acc, country) => {
-    acc[country.code] = country;
-    acc[country.id] = country;
-    return acc;
-  }, {});
-});
+const erpLinkStatus = computed(
+  () => props.additionalAttributes?.erpLinkStatus || 'unlinked'
+);
 
-const countryDetails = computed(() => {
-  const attributes = props.additionalAttributes || {};
-  const { country, countryCode, city } = attributes;
-
-  if (!country && !countryCode) return null;
-
-  const activeCountry =
-    countriesMap.value[country] || countriesMap.value[countryCode];
-
-  if (!activeCountry) return null;
-
-  return {
-    countryCode: activeCountry.id,
-    city: city ? `${city},` : null,
-    name: activeCountry.name,
+const erpStatusConfig = computed(() => {
+  const map = {
+    linked: {
+      label: t('CONTACTS_LAYOUT.CARD.EDIT_DETAILS_FORM.ERP_STATUS.LINKED'),
+      class: 'bg-n-teal-3 text-n-teal-11',
+    },
+    sync_required: {
+      label: t(
+        'CONTACTS_LAYOUT.CARD.EDIT_DETAILS_FORM.ERP_STATUS.SYNC_REQUIRED'
+      ),
+      class: 'bg-n-amber-3 text-n-amber-11',
+    },
+    sync_failed: {
+      label: t('CONTACTS_LAYOUT.CARD.EDIT_DETAILS_FORM.ERP_STATUS.SYNC_FAILED'),
+      class: 'bg-n-ruby-3 text-n-ruby-11',
+    },
   };
+  return (
+    map[erpLinkStatus.value] || {
+      label: t('CONTACTS_LAYOUT.CARD.EDIT_DETAILS_FORM.ERP_STATUS.UNLINKED'),
+      class: 'bg-n-alpha-2 text-n-slate-10',
+    }
+  );
 });
 
-const formattedLocation = computed(() => {
-  if (!countryDetails.value) return '';
+const customerClassification = computed(
+  () => props.additionalAttributes?.customCustomerClassification || ''
+);
 
-  return [countryDetails.value.city, countryDetails.value.name]
-    .filter(Boolean)
-    .join(' ');
-});
+const classificationBadgeClass = getClassificationBadgeClass;
 
 const handleFormUpdate = updatedData => {
   Object.assign(contactData.value, updatedData);
@@ -116,16 +116,16 @@ const handleAvatarHover = isHovered => {
         'outline-n-weak !bg-n-slate-3 dark:!bg-n-solid-3': isSelected,
       }"
     >
-      <div class="flex items-center justify-start flex-1 gap-4">
+      <div class="flex items-center justify-start flex-1 min-w-0 gap-3">
         <div
-          class="relative"
+          class="relative shrink-0"
           @mouseenter="handleAvatarHover(true)"
           @mouseleave="handleAvatarHover(false)"
         >
           <Avatar
             :name="name"
             :src="thumbnail"
-            :size="48"
+            :size="36"
             :status="availabilityStatus"
             hide-offline-status
             rounded-full
@@ -144,49 +144,55 @@ const handleAvatarHover = isHovered => {
             </template>
           </Avatar>
         </div>
-        <div class="flex flex-col gap-0.5 flex-1">
-          <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <span class="text-base font-medium truncate text-n-slate-12">
+
+        <div class="flex flex-col gap-1 flex-1 min-w-0">
+          <!-- Row 1: Name + badges -->
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span
+              dir="auto"
+              class="min-w-0 text-sm font-semibold truncate text-start text-n-slate-12"
+            >
               {{ name }}
             </span>
-            <span class="inline-flex items-center gap-1">
-              <span
-                v-if="additionalAttributes?.companyName"
-                class="i-ph-building-light size-4 text-n-slate-10 mb-0.5"
-              />
-              <span
-                v-if="additionalAttributes?.companyName"
-                class="text-sm truncate text-n-slate-11"
-              >
-                {{ additionalAttributes.companyName }}
-              </span>
+            <span
+              class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium"
+              :class="erpStatusConfig.class"
+            >
+              {{ erpStatusConfig.label }}
+            </span>
+            <span
+              v-if="customerClassification"
+              class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium"
+              :class="classificationBadgeClass(customerClassification)"
+            >
+              {{ customerClassification }}
             </span>
           </div>
-          <div
-            class="flex flex-wrap items-center justify-start gap-x-3 gap-y-1"
-          >
-            <div v-if="email" class="truncate max-w-72" :title="email">
-              <span class="text-sm text-n-slate-11">
-                {{ email }}
-              </span>
-            </div>
-            <div v-if="email" class="w-px h-3 truncate bg-n-slate-6" />
-            <span v-if="phoneNumber" class="text-sm truncate text-n-slate-11">
+
+          <!-- Row 2: Contact info -->
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+            <span
+              v-if="email"
+              dir="auto"
+              class="flex items-center gap-1 text-xs text-n-slate-10 truncate max-w-64"
+              :title="email"
+            >
+              <span class="i-lucide-mail size-3 shrink-0" />
+              {{ email }}
+            </span>
+            <span
+              v-if="phoneNumber"
+              dir="ltr"
+              class="flex items-center gap-1 text-xs font-mono text-n-slate-10 tabular-nums"
+            >
+              <span class="i-lucide-phone size-3 shrink-0" />
               {{ phoneNumber }}
             </span>
-            <div v-if="phoneNumber" class="w-px h-3 truncate bg-n-slate-6" />
-            <span
-              v-if="countryDetails"
-              class="inline-flex items-center gap-2 text-sm truncate text-n-slate-11"
-            >
-              <Flag :country="countryDetails.countryCode" class="size-3.5" />
-              {{ formattedLocation }}
-            </span>
-            <div v-if="countryDetails" class="w-px h-3 truncate bg-n-slate-6" />
             <Button
               :label="t('CONTACTS_LAYOUT.CARD.VIEW_DETAILS')"
               variant="link"
               size="xs"
+              class="!text-xs"
               @click="onClickViewDetails"
             />
           </div>
@@ -212,7 +218,7 @@ const handleAvatarHover = isHovered => {
           "
         >
           <div class="overflow-hidden">
-            <div class="flex flex-col gap-6 p-6 border-t border-n-strong">
+            <div class="flex flex-col gap-5 p-4 border-t border-n-strong">
               <ContactsForm
                 ref="contactsFormRef"
                 :contact-data="contactData"

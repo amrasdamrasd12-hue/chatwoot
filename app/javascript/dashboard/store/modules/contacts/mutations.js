@@ -15,9 +15,15 @@ export const mutations = {
   },
 
   [types.SET_CONTACT_META]: ($state, data) => {
-    const { count, current_page: currentPage, has_more: hasMore } = data;
+    const {
+      count,
+      current_page: currentPage,
+      has_more: hasMore,
+      stats = {},
+    } = data;
     $state.meta.count = count;
     $state.meta.currentPage = currentPage;
+    $state.meta.stats = stats;
     if (hasMore !== undefined) {
       $state.meta.hasMore = hasMore;
     }

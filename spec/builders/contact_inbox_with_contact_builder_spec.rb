@@ -96,6 +96,88 @@ describe ContactInboxWithContactBuilder do
       expect(contact_inbox.contact.id).to be(contact.id)
     end
 
+    context 'when contact has secondary phones in custom_customer_mobile_numbers' do
+      let(:secondary_phone) { '+201009999999' }
+      let!(:contact_with_secondary) do
+        create(:contact, account: account, additional_attributes: {
+                 'custom_customer_mobile_numbers' => [
+                   { 'phone' => secondary_phone, 'phone_type' => 'Mobile', 'default_phone' => false }
+                 ]
+               })
+      end
+
+      it 'finds contact by exact secondary phone match' do
+        contact_inbox = described_class.new(
+          source_id: '201009999999',
+          inbox: inbox,
+          contact_attributes: { phone_number: secondary_phone }
+        ).perform
+
+        expect(contact_inbox.contact.id).to eq(contact_with_secondary.id)
+      end
+
+      it 'finds contact when incoming phone lacks + prefix (last-10-digits match)' do
+        contact_inbox = described_class.new(
+          source_id: '201009999999',
+          inbox: inbox,
+          contact_attributes: { phone_number: '+201009999999' }
+        ).perform
+
+        # stored "+201009999999", incoming "+201009999999" → last 10 = "1009999999" ✓
+        expect(contact_inbox.contact.id).to eq(contact_with_secondary.id)
+      end
+
+      it 'creates a contact_inbox with the new source_id so future lookups are instant' do
+        described_class.new(
+          source_id: '201009999999',
+          inbox: inbox,
+          contact_attributes: { phone_number: secondary_phone }
+        ).perform
+
+        expect(ContactInbox.find_by(source_id: '201009999999', inbox: inbox)).to be_present
+      end
+
+      it 'creates a new contact when phone is not in any secondary array' do
+        contact_inbox = described_class.new(
+          source_id: '201007777777',
+          inbox: inbox,
+          contact_attributes: { phone_number: '+201007777777', name: 'Stranger' }
+        ).perform
+
+        expect(contact_inbox.contact.id).not_to eq(contact_with_secondary.id)
+        expect(contact_inbox.contact.name).to eq('Stranger')
+      end
+    end
+
+    context 'when contact has secondary phones in legacy flat fields' do
+      let!(:legacy_contact) do
+        create(:contact, account: account, additional_attributes: {
+                 'phone_secondary' => '+201008888888',
+                 'phone_alternative' => '+201006666666'
+               })
+      end
+
+      it 'finds contact via legacy phone_secondary field' do
+        contact_inbox = described_class.new(
+          source_id: '201008888888',
+          inbox: inbox,
+          contact_attributes: { phone_number: '+201008888888' }
+        ).perform
+
+        expect(contact_inbox.contact.id).to eq(legacy_contact.id)
+      end
+
+      it 'finds contact via legacy phone_alternative field' do
+        contact_inbox = described_class.new(
+          source_id: '201006666666',
+          inbox: inbox,
+          contact_attributes: { phone_number: '+201006666666' }
+        ).perform
+
+        expect(contact_inbox.contact.id).to eq(legacy_contact.id)
+      end
+    end
+
     it 'reuses contact if it exists with the same source_id in a Facebook inbox when creating for Instagram inbox' do
       instagram_source_id = '123456789'
 

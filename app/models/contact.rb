@@ -48,6 +48,7 @@ class Contact < ApplicationRecord
   include LlmFormattable
 
   validates :account_id, presence: true
+  validate :unique_mobile_numbers_within_account, if: -> { additional_attributes_changed? || new_record? }
   validates :email, allow_blank: true, uniqueness: { scope: [:account_id], case_sensitive: false },
                     format: { with: Devise.email_regexp, message: I18n.t('errors.contacts.email.invalid') }
   validates :identifier, allow_blank: true, uniqueness: { scope: [:account_id] }
@@ -82,6 +83,14 @@ class Contact < ApplicationRecord
     order(
       Arel::Nodes::SqlLiteral.new(
         sanitize_sql_for_order("\"contacts\".\"created_at\" #{direction}
+          NULLS LAST")
+      )
+    )
+  }
+  scope :order_on_updated_at, lambda { |direction|
+    order(
+      Arel::Nodes::SqlLiteral.new(
+        sanitize_sql_for_order("\"contacts\".\"updated_at\" #{direction}
           NULLS LAST")
       )
     )
@@ -143,6 +152,35 @@ class Contact < ApplicationRecord
       .where.missing(:conversations)
   }
 
+  def unique_mobile_numbers_within_account
+    phones = additional_attributes&.[]('custom_customer_mobile_numbers') || []
+    phone_numbers = phones.filter_map { |p| p['phone'].presence }
+    return if phone_numbers.empty?
+
+    base_scope = account.contacts
+    base_scope = base_scope.where.not(id: id) if persisted?
+
+    phone_numbers.each do |phone|
+      duplicate = base_scope.where(
+        "EXISTS (
+          SELECT 1 FROM jsonb_array_elements(
+            COALESCE(additional_attributes->'custom_customer_mobile_numbers', '[]'::jsonb)
+          ) AS mob
+          WHERE mob->>'phone' = ?
+        )",
+        phone
+      ).first
+      duplicate ||= base_scope.find_by(phone_number: phone)
+
+      next unless duplicate
+
+      errors.add(:base, :taken_by,
+                 message: I18n.t('errors.contacts.phone_number.taken_by',
+                                 phone: phone, contact_name: duplicate.name))
+      break
+    end
+  end
+
   def get_source_id(inbox_id)
     contact_inboxes.find_by!(inbox_id: inbox_id).source_id
   end
@@ -181,7 +219,10 @@ class Contact < ApplicationRecord
   def self.resolved_contacts(use_crm_v2: false)
     return where(contact_type: 'lead') if use_crm_v2
 
-    where("contacts.email <> '' OR contacts.phone_number <> '' OR contacts.identifier <> ''")
+    where(
+      "contacts.email <> '' OR contacts.phone_number <> '' OR contacts.identifier <> ''
+       OR jsonb_array_length(COALESCE(contacts.additional_attributes->'custom_customer_mobile_numbers', '[]'::jsonb)) > 0"
+    )
   end
 
   def discard_invalid_attrs
@@ -215,12 +256,24 @@ class Contact < ApplicationRecord
 
   def prepare_contact_attributes
     prepare_email_attribute
+    prepare_identifier_attribute
+    prepare_phone_number_attribute
     prepare_jsonb_attributes
   end
 
   def prepare_email_attribute
     # So that the db unique constraint won't throw error when email is ''
     self.email = email.present? ? email.downcase : nil
+  end
+
+  def prepare_identifier_attribute
+    # So that the db unique constraint won't throw error when identifier is ''
+    self.identifier = (identifier.presence)
+  end
+
+  def prepare_phone_number_attribute
+    # So that the db unique constraint won't throw error when phone_number is ''
+    self.phone_number = (phone_number.presence)
   end
 
   def prepare_jsonb_attributes

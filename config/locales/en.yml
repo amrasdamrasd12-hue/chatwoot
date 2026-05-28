@@ -76,12 +76,15 @@ en:
     contacts:
       import:
         failed: File is blank
+        invalid_file_type: Only Excel .xlsx files are supported.
+        success: Contacts imported successfully.
       export:
-        success: We will notify you once contacts export file is ready to view.
+        success: Contacts export file is ready.
       email:
         invalid: Invalid email
       phone_number:
         invalid: should be in e164 format
+        taken_by: "Phone %{phone} is already assigned to contact: %{contact_name}"
     companies:
       domain:
         invalid: must be a valid domain name

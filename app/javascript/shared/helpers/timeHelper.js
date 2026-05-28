@@ -8,6 +8,32 @@ import {
   isYesterday,
 } from 'date-fns';
 
+const relativeTimeUnits = [
+  { unit: 'year', seconds: 31536000 },
+  { unit: 'month', seconds: 2592000 },
+  { unit: 'week', seconds: 604800 },
+  { unit: 'day', seconds: 86400 },
+  { unit: 'hour', seconds: 3600 },
+  { unit: 'minute', seconds: 60 },
+  { unit: 'second', seconds: 1 },
+];
+
+const normalizedLocale = locale => locale?.replace('_', '-') || 'en';
+
+export const localizedRelativeTime = (time, locale) => {
+  const unixTime = fromUnixTime(time);
+  const diffInSeconds = Math.round((unixTime.getTime() - Date.now()) / 1000);
+  const absoluteDiff = Math.abs(diffInSeconds);
+  const { unit, seconds } =
+    relativeTimeUnits.find(item => absoluteDiff >= item.seconds) ||
+    relativeTimeUnits[relativeTimeUnits.length - 1];
+  const value = Math.round(diffInSeconds / seconds);
+
+  return new Intl.RelativeTimeFormat(normalizedLocale(locale), {
+    numeric: 'auto',
+  }).format(value, unit);
+};
+
 /**
  * Formats a Unix timestamp into a human-readable time format.
  * @param {number} time - Unix timestamp.
@@ -40,7 +66,11 @@ export const messageTimestamp = (time, dateFormat = 'MMM d, yyyy') => {
  * @param {number} time - Unix timestamp.
  * @returns {string} Relative time string.
  */
-export const dynamicTime = time => {
+export const dynamicTime = (time, locale) => {
+  if (locale) {
+    return localizedRelativeTime(time, locale);
+  }
+
   const unixTime = fromUnixTime(time);
   return formatDistanceToNow(unixTime, { addSuffix: true });
 };

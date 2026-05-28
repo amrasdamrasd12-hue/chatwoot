@@ -63,12 +63,15 @@ ar:
     contacts:
       import:
         failed: الملف فارغ
+        invalid_file_type: يتم دعم ملفات Excel بصيغة .xlsx فقط.
+        success: تم استيراد جهات الاتصال بنجاح.
       export:
-        success: سنقوم بإعلامك بمجرد أن يكون ملف تصدير جهات الاتصال جاهزاً للعرض.
+        success: ملف تصدير جهات الاتصال جاهز.
       email:
         invalid: إيميل غير صالح
       phone_number:
         invalid: يجب أن يكون بصيغة e164
+        taken_by: "الهاتف %{phone} مسجل بالفعل لدى جهة الاتصال: %{contact_name}"
     companies:
       domain:
         invalid: must be a valid domain name

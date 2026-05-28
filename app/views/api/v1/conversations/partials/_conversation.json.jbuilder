@@ -24,6 +24,7 @@ json.meta do
     end
   end
   json.hmac_verified conversation.contact_inbox&.hmac_verified
+  json.source_id conversation.contact_inbox&.source_id
 end
 
 json.id conversation.display_id
