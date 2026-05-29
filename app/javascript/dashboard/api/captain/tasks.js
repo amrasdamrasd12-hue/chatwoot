@@ -105,11 +105,17 @@ class TasksAPI extends ApiClient {
 
   /**
    * Eltafouk: pre-send spell/grammar check. Returns
-   * { has_errors, original, corrected } so the reply box can render the
-   * confirmation modal only when the model actually rewrote something.
+   * { has_errors, original, corrected, fixes }. The `surface` hint
+   * ("dm" / "comments") lets the backend short-circuit when the
+   * matching toggle is off in the per-account settings — that way a
+   * disabled surface costs zero LLM tokens.
    */
-  spellCheck(content, signal) {
-    return axios.post(`${this.url}/spell_check`, { content }, { signal });
+  spellCheck(content, surface, signal) {
+    return axios.post(
+      `${this.url}/spell_check`,
+      { content, surface: surface || 'dm' },
+      { signal }
+    );
   }
 }
 

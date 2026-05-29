@@ -26,6 +26,8 @@ import profile from './profile/profile.routes';
 import security from './security/security.routes';
 import conversationWorkflow from './conversationWorkflow/conversationWorkflow.routes';
 import captain from './captain/captain.routes';
+// Eltafouk: per-account spell-check guard configuration page.
+import spellCheck from './spellCheck/spellCheck.routes';
 
 export default {
   routes: [
@@ -67,5 +69,6 @@ export default {
     ...security.routes,
     ...conversationWorkflow.routes,
     ...captain.routes,
+    ...spellCheck.routes,
   ],
 };

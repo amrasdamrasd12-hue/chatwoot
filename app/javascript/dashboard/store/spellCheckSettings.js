@@ -1,0 +1,69 @@
+import { defineStore } from 'pinia';
+import SpellCheckSettingsAPI from 'dashboard/api/spellCheckSettings';
+
+// Eltafouk: per-account spell-check guard configuration. Cached at the
+// app shell level so the ReplyBox can short-circuit the DM toggle check
+// synchronously, and so the (separate) CommentThread panel can pull the
+// same settings via the same store when hosted inside Chatwoot.
+export const useSpellCheckSettingsStore = defineStore('spellCheckSettings', {
+  state: () => ({
+    settings: {
+      dm_enabled: true,
+      comments_enabled: false,
+      strictness: 3,
+    },
+    strictnessLabels: {
+      1: 'سطحي جداً',
+      2: 'سطحي',
+      3: 'متوسط',
+      4: 'دقيق',
+      5: 'صارم',
+      6: 'صارم جداً',
+    },
+    uiFlags: {
+      isFetching: false,
+      isUpdating: false,
+      loaded: false,
+    },
+  }),
+
+  getters: {
+    getSettings: state => state.settings,
+    getStrictnessLabels: state => state.strictnessLabels,
+    getUIFlags: state => state.uiFlags,
+    isDmEnabled: state => state.settings.dm_enabled !== false,
+    isCommentsEnabled: state => state.settings.comments_enabled === true,
+  },
+
+  actions: {
+    async fetch() {
+      if (this.uiFlags.isFetching) return;
+      this.uiFlags.isFetching = true;
+      try {
+        const response = await SpellCheckSettingsAPI.get();
+        this.settings = response.data.settings || this.settings;
+        if (response.data.strictness_labels) {
+          this.strictnessLabels = response.data.strictness_labels;
+        }
+        this.uiFlags.loaded = true;
+      } catch (error) {
+        // Fail-open: keep defaults so the UI still works.
+      } finally {
+        this.uiFlags.isFetching = false;
+      }
+    },
+
+    async update(patch) {
+      this.uiFlags.isUpdating = true;
+      try {
+        const response = await SpellCheckSettingsAPI.update(patch);
+        this.settings = response.data.settings || this.settings;
+        if (response.data.strictness_labels) {
+          this.strictnessLabels = response.data.strictness_labels;
+        }
+      } finally {
+        this.uiFlags.isUpdating = false;
+      }
+    },
+  },
+});

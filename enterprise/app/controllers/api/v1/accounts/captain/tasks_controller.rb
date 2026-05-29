@@ -59,7 +59,17 @@ class Api::V1::Accounts::Captain::TasksController < Api::V1::Accounts::BaseContr
   # generic `{ message: ... }` task response shape — it would silently drop
   # the `has_errors` / `original` / `corrected` fields the reply box needs
   # to decide whether to open the modal.
+  #
+  # `surface` is a free-form caller hint ("dm" / "comments") so the
+  # account-level toggle can disable spell-check per surface without the
+  # caller having to inspect settings itself.
   def spell_check
+    surface = params[:surface].to_s
+    if surface_disabled?(surface)
+      render json: { has_errors: false, original: params[:content].to_s, corrected: params[:content].to_s, fixes: [] }
+      return
+    end
+
     result = Captain::SpellCheckService.new(
       account: Current.account,
       content: params[:content].to_s
@@ -78,6 +88,15 @@ class Api::V1::Accounts::Captain::TasksController < Api::V1::Accounts::BaseContr
   end
 
   private
+
+  def surface_disabled?(surface)
+    settings = Current.account.spell_check_settings.to_h.stringify_keys
+    case surface
+    when 'comments' then settings['comments_enabled'] == false
+    when 'dm' then settings['dm_enabled'] == false
+    else false  # unknown surface — never block, default behaviour
+    end
+  end
 
   def render_result(result)
     if result.nil?

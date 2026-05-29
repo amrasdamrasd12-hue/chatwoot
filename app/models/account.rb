@@ -68,6 +68,15 @@ class Account < ApplicationRecord
             'help_center_search': { 'type': %w[boolean null] }
           },
           'additionalProperties': false
+        },
+        'spell_check_settings': {
+          'type': %w[object null],
+          'properties': {
+            'dm_enabled': { 'type': %w[boolean null] },
+            'comments_enabled': { 'type': %w[boolean null] },
+            'strictness': { 'type': %w[integer null], 'minimum': 1, 'maximum': 6 }
+          },
+          'additionalProperties': false
         }
       },
     'required': [],
@@ -90,6 +99,7 @@ class Account < ApplicationRecord
   store_accessor :settings, :audio_transcriptions, :auto_resolve_label
   store_accessor :settings, :captain_models, :captain_features
   store_accessor :settings, :keep_pending_on_bot_failure
+  store_accessor :settings, :spell_check_settings
 
   has_many :account_users, dependent: :destroy_async
   has_many :agent_bot_inboxes, dependent: :destroy_async

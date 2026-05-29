@@ -3,9 +3,23 @@ class Captain::SpellCheckService < Captain::BaseTaskService
 
   # Eltafouk: pre-send spell/grammar guard. Runs on every outgoing send so
   # latency dominates UX. gpt-4.1-nano is OpenAI's cheapest non-reasoning
-  # model and pairs well with the tight Arabic spell_check.liquid prompt
-  # (~50 tokens) — keeping per-call processing time minimal.
+  # model and pairs well with the parameterised Arabic spell_check.liquid
+  # prompt — keeping per-call processing time minimal.
   MODEL = 'gpt-4.1-nano'.freeze
+
+  # Per-account strictness selector. The Liquid template branches on this
+  # integer so each level emits a different rulebook to the model. Default
+  # is 3 (middle of the road) — agents can dial up later as confidence
+  # grows. Labels live alongside the values so the prompt can quote them.
+  STRICTNESS_LABELS = {
+    1 => 'سطحي جداً',
+    2 => 'سطحي',
+    3 => 'متوسط',
+    4 => 'دقيق',
+    5 => 'صارم',
+    6 => 'صارم جداً'
+  }.freeze
+  DEFAULT_STRICTNESS = 3
 
   def perform
     stripped = content.to_s.strip
@@ -19,9 +33,22 @@ class Captain::SpellCheckService < Captain::BaseTaskService
 
   private
 
+  def strictness
+    raw = account.spell_check_settings.to_h['strictness'].to_i
+    raw.between?(1, 6) ? raw : DEFAULT_STRICTNESS
+  end
+
+  def system_prompt
+    template = prompt_from_file('spell_check')
+    Liquid::Template.parse(template).render(
+      'strictness' => strictness,
+      'strictness_label' => STRICTNESS_LABELS[strictness]
+    )
+  end
+
   def messages
     [
-      { role: 'system', content: prompt_from_file('spell_check') },
+      { role: 'system', content: system_prompt },
       { role: 'user', content: content }
     ]
   end

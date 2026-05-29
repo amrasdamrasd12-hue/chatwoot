@@ -101,6 +101,9 @@ Rails.application.routes.draw do
             end
           end
           resource :saml_settings, only: [:show, :create, :update, :destroy]
+          # Eltafouk: per-account configuration for the pre-send spell-check
+          # guard (DM toggle, comments toggle, 6-level strictness).
+          resource :spell_check_settings, only: [:show, :update]
           resources :agent_bots, only: [:index, :create, :show, :update, :destroy] do
             delete :avatar, on: :member
             post :reset_access_token, on: :member

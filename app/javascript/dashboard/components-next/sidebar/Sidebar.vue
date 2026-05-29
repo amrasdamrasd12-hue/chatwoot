@@ -695,6 +695,14 @@ const menuItems = computed(() => {
           icon: 'i-lucide-briefcase',
           to: accountScopedRoute('general_settings_index'),
         },
+        // Eltafouk: pre-send Arabic spell-check guard configuration —
+        // toggles for DM/comments scope and a 6-level strictness dial.
+        {
+          name: 'Settings Spell Check',
+          label: t('SIDEBAR.SPELL_CHECK'),
+          icon: 'i-lucide-spell-check',
+          to: accountScopedRoute('spell_check_settings_index'),
+        },
         // {
         //   name: 'Settings Captain',
         //   label: t('SIDEBAR.CAPTAIN_AI'),

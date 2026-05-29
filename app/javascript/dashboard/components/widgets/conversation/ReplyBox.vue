@@ -56,6 +56,7 @@ import { useKbd } from 'dashboard/composables/utils/useKbd';
 import { isFileTypeAllowedForChannel } from 'shared/helpers/FileHelper';
 import TasksAPI from 'dashboard/api/captain/tasks';
 import SpellCheckModal from './SpellCheckModal.vue';
+import { useSpellCheckSettingsStore } from 'dashboard/store/spellCheckSettings';
 
 import { LOCAL_STORAGE_KEYS } from 'dashboard/constants/localStorage';
 import { LocalStorage } from 'shared/helpers/localStorage';
@@ -104,6 +105,10 @@ export default {
     const replyEditor = useTemplateRef('replyEditor');
     const copilot = useCopilotReply();
     const shortcutKey = useKbd(['$mod', '+', 'enter']);
+    // Eltafouk: per-account spell-check toggle lookup. Exposed as a
+    // store reference so the template / methods can read .isDmEnabled
+    // synchronously without any prop drilling.
+    const spellCheckSettingsStore = useSpellCheckSettingsStore();
 
     return {
       uiSettings,
@@ -114,6 +119,7 @@ export default {
       replyEditor,
       copilot,
       shortcutKey,
+      spellCheckSettingsStore,
     };
   },
   data() {
@@ -532,12 +538,19 @@ export default {
     // avoid firing for every keystroke in a normal typing burst.
     this.debouncedSpellCheckPrefetch = debounce(() => {
       if (this.isPrivate) return;
+      if (this.spellCheckSettingsStore?.isDmEnabled === false) return;
       const trimmed = (this.message || '').trim();
       if (trimmed.length < 3) return;
       if (this.spellCheckCache.has(trimmed)) return;
       if (this.spellCheckInFlight?.trimmed === trimmed) return;
       this.runBackgroundSpellCheck(trimmed);
     }, 250);
+
+    // Lazy-load the settings store once per session so toggle decisions
+    // can resolve synchronously from cache afterwards.
+    if (!this.spellCheckSettingsStore.uiFlags.loaded) {
+      this.spellCheckSettingsStore.fetch();
+    }
 
     this.fetchAndSetReplyTo();
     emitter.on(BUS_EVENTS.TOGGLE_REPLY_TO_MESSAGE, this.fetchAndSetReplyTo);
@@ -785,7 +798,7 @@ export default {
     // click can await the same in-flight request rather than starting a
     // duplicate one.
     runBackgroundSpellCheck(trimmed) {
-      const promise = TasksAPI.spellCheck(trimmed)
+      const promise = TasksAPI.spellCheck(trimmed, 'dm')
         .then(({ data }) => {
           this.spellCheckCache.set(trimmed, data);
           return data;
@@ -841,7 +854,12 @@ export default {
       // fresh blocking call. Failure is fail-open — we never block a send
       // on a flaky LLM call.
       const trimmed = (this.message || '').trim();
+      // Honor the account-level DM toggle — when an admin disables the
+      // guard for DM messages the modal stays out of the agent's way and
+      // we never hit the LLM endpoint at all.
+      const dmEnabled = this.spellCheckSettingsStore?.isDmEnabled !== false;
       const needsSpellCheck =
+        dmEnabled &&
         !this.isPrivate &&
         trimmed.length > 0 &&
         this.spellCheckApprovedHash !== trimmed;

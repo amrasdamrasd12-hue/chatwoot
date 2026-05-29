@@ -381,7 +381,30 @@
     "DOCS": "Read docs",
     "SECURITY": "Security",
     "CAPTAIN_AI": "Captain",
-    "CONVERSATION_WORKFLOW": "Conversation Workflow"
+    "CONVERSATION_WORKFLOW": "Conversation Workflow",
+    "SPELL_CHECK": "مدقق إملائي"
+  },
+  "SPELL_CHECK_SETTINGS": {
+    "TITLE": "المدقق الإملائي الذكي",
+    "DESCRIPTION": "إعدادات التصحيح الإملائي التلقائي قبل إرسال الرسائل للعميل. يمكنك التحكم في مكان تطبيقه ومدى تشدده.",
+    "LOADING": "جاري تحميل الإعدادات...",
+    "SAVE": "حفظ الإعدادات",
+    "SAVING": "جاري الحفظ...",
+    "SAVE_SUCCESS": "تم حفظ الإعدادات",
+    "SAVE_FAILED": "حدث خطأ أثناء الحفظ",
+    "SCOPE": {
+      "TITLE": "أماكن التشغيل",
+      "DESCRIPTION": "اختر أين يفحص المدقق رسائلك قبل الإرسال.",
+      "DM_LABEL": "تفعيل في كل رسائل DM",
+      "DM_DESCRIPTION": "WhatsApp / Messenger / Instagram DM / البريد الإلكتروني / أي محادثة خاصة",
+      "COMMENTS_LABEL": "تفعيل في ردود الكومنتات",
+      "COMMENTS_DESCRIPTION": "الردود العامة على تعليقات Facebook و Instagram + ردود الـ DM المرتبطة بالكومنت"
+    },
+    "STRICTNESS": {
+      "TITLE": "مستوى التدقيق",
+      "DESCRIPTION": "اختر مدى تشدد المدقق في اكتشاف الأخطاء. ابدأ بمستوى سطحي ومع تعوّد الموظفين ارفع المستوى تدريجياً.",
+      "LEVEL_BADGE": "المستوى {level} / 6"
+    }
   },
   "CAPTAIN_SETTINGS": {
     "TITLE": "Captain Settings",
