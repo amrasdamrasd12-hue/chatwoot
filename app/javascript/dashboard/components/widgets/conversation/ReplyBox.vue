@@ -155,12 +155,20 @@ export default {
       // instantly when they click send — the cache is keyed by the trimmed
       // body. `spellCheckInFlight` lets a click that lands mid-pre-fetch
       // reuse the in-flight promise instead of starting a new request.
+      //
+      // `spellCheckBypassOnce` is a single-use bypass flag: when the modal
+      // resolves (any option), it flips on so the recursive
+      // `confirmOnSendReply()` call doesn't re-open the modal in an
+      // infinite loop. Critically, it does NOT persist beyond that one
+      // send — the next time the agent hits send (even for identical
+      // text), the spell-check runs again. The user asked for "every send
+      // re-checks", so we deliberately don't keep a session-wide approval.
       isSpellChecking: false,
       showSpellCheckModal: false,
       spellCheckOriginal: '',
       spellCheckCorrected: '',
       spellCheckFixes: [],
-      spellCheckApprovedHash: '',
+      spellCheckBypassOnce: false,
       spellCheckCache: new Map(),
       spellCheckInFlight: null,
       debouncedSpellCheckPrefetch: () => {},
@@ -816,18 +824,21 @@ export default {
       this.spellCheckInFlight = { trimmed, promise };
       return promise;
     },
-    // Eltafouk: spell-check modal callbacks. Each path marks the chosen
-    // text as "already approved" before retrying the send so the second
-    // pass through confirmOnSendReply short-circuits the API call.
+    // Eltafouk: spell-check modal callbacks. Each "send" path flips
+    // `spellCheckBypassOnce` so the recursive `confirmOnSendReply()`
+    // skips the modal exactly once — the bypass is consumed on entry
+    // to that call. The next send (even for identical text) will run
+    // a fresh check; agents asked to be re-prompted every time so they
+    // can't accidentally bypass a typo by sending twice.
     onSpellCheckSendCorrected(corrected) {
       this.message = corrected;
-      this.spellCheckApprovedHash = (corrected || '').trim();
+      this.spellCheckBypassOnce = true;
       this.showSpellCheckModal = false;
       this.confirmOnSendReply();
     },
     onSpellCheckSendOriginal(original) {
       this.message = original;
-      this.spellCheckApprovedHash = (original || '').trim();
+      this.spellCheckBypassOnce = true;
       this.showSpellCheckModal = false;
       this.confirmOnSendReply();
     },
@@ -844,15 +855,21 @@ export default {
         return;
       }
       // Eltafouk: pre-send spell/grammar guard. Skipped for private notes
-      // (only visible to agents internally), empty messages, and messages
-      // already approved via the modal in this session.
+      // (only visible to agents internally), empty messages, and the
+      // single send immediately after the modal resolves (`bypassOnce`).
+      //
+      // We deliberately re-check on every send — including identical text
+      // — so the agent can't accidentally bypass corrections by sending
+      // the same draft twice. The single-use bypass is only there to
+      // prevent the recursive `confirmOnSendReply()` call from re-opening
+      // the modal in an infinite loop right after the agent picks an
+      // option.
       //
       // Cache strategy: the debounced typing-time prefetcher usually has
       // a result already cached by the time the agent clicks send, so the
       // modal opens instantly. If the cache misses, we await the in-flight
       // prefetch when it's for the same content; otherwise fall back to a
-      // fresh blocking call. Failure is fail-open — we never block a send
-      // on a flaky LLM call.
+      // fresh blocking call. Failure is fail-open.
       const trimmed = (this.message || '').trim();
       // Honor the account-level DM toggle — when an admin disables the
       // guard for DM messages the modal stays out of the agent's way and
@@ -862,7 +879,10 @@ export default {
         dmEnabled &&
         !this.isPrivate &&
         trimmed.length > 0 &&
-        this.spellCheckApprovedHash !== trimmed;
+        !this.spellCheckBypassOnce;
+      // Consume the bypass flag whether or not we ran a check — it's a
+      // single-use token, never persists past this confirm.
+      this.spellCheckBypassOnce = false;
       if (needsSpellCheck) {
         let data = this.spellCheckCache.get(trimmed);
         if (
@@ -891,9 +911,6 @@ export default {
           this.spellCheckFixes = Array.isArray(data.fixes) ? data.fixes : [];
           this.showSpellCheckModal = true;
           return;
-        }
-        if (data) {
-          this.spellCheckApprovedHash = trimmed;
         }
       }
 
