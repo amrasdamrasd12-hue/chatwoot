@@ -522,11 +522,13 @@ export default {
       true
     );
 
-    // Eltafouk: pre-fetch the spell check 700 ms after the agent stops
+    // Eltafouk: pre-fetch the spell check 250 ms after the agent stops
     // typing. Result lands in `spellCheckCache` keyed by trimmed body so
     // `confirmOnSendReply` can read it instantly. Skip private notes and
     // very short drafts (a <3-char message is almost always intentional
-    // and not worth the LLM round-trip).
+    // and not worth the LLM round-trip). 250 ms is tight enough to catch
+    // an agent who barely pauses before clicking send, but long enough to
+    // avoid firing for every keystroke in a normal typing burst.
     this.debouncedSpellCheckPrefetch = debounce(() => {
       if (this.isPrivate) return;
       const trimmed = (this.message || '').trim();
@@ -534,7 +536,7 @@ export default {
       if (this.spellCheckCache.has(trimmed)) return;
       if (this.spellCheckInFlight?.trimmed === trimmed) return;
       this.runBackgroundSpellCheck(trimmed);
-    }, 700);
+    }, 250);
 
     this.fetchAndSetReplyTo();
     emitter.on(BUS_EVENTS.TOGGLE_REPLY_TO_MESSAGE, this.fetchAndSetReplyTo);

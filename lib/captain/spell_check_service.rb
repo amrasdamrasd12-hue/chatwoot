@@ -1,13 +1,12 @@
 class Captain::SpellCheckService < Captain::BaseTaskService
   pattr_initialize [:account!, :content!]
 
-  # Eltafouk: pre-send spell/grammar guard. Wraps the existing
-  # `fix_spelling_grammar` prompt — same Arabic-aware corrections used by the
-  # Copilot "fix" action — but bound to gpt-4.1-mini (≈5× cheaper / 2× faster
-  # than the default gpt-4.1) since spell-check runs on every outgoing send.
-  # Returns a structured result so the client can short-circuit when the
-  # message is already clean and only render the diff modal when it isn't.
-  MODEL = 'gpt-4.1-mini'.freeze
+  # Eltafouk: pre-send spell/grammar guard. Runs on every outgoing send, so
+  # latency dominates the agent's perceived UX. Picks the fastest available
+  # OpenAI model (gpt-4.1-nano, typical ≈300–500 ms) and pairs it with a
+  # purpose-built Arabic spell-check prompt (~30 tokens vs the 250-token
+  # generic Copilot prompt) so input-processing time stays tiny.
+  MODEL = 'gpt-4.1-nano'.freeze
 
   def perform
     stripped = content.to_s.strip
@@ -28,7 +27,7 @@ class Captain::SpellCheckService < Captain::BaseTaskService
 
   def messages
     [
-      { role: 'system', content: prompt_from_file('fix_spelling_grammar') },
+      { role: 'system', content: prompt_from_file('spell_check') },
       { role: 'user', content: content }
     ]
   end
