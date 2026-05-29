@@ -77,6 +77,11 @@ class Captain::SpellCheckService < Captain::BaseTaskService
       wrong = fix['wrong'].to_s.strip
       right = fix['right'].to_s.strip
       next if wrong.empty? || right.empty?
+      # Drop phantom fixes — the model sometimes reports a "correction"
+      # where wrong == right (it picked up an informal word but then
+      # decided not to change it). These would render as highlighted
+      # pills with no actual diff, which confuses the agent.
+      next if normalize(wrong) == normalize(right)
 
       { wrong: wrong, right: right, why: fix['why'].to_s.strip }
     end
