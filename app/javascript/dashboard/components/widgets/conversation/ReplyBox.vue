@@ -54,6 +54,8 @@ import {
 import { useCopilotReply } from 'dashboard/composables/useCopilotReply';
 import { useKbd } from 'dashboard/composables/utils/useKbd';
 import { isFileTypeAllowedForChannel } from 'shared/helpers/FileHelper';
+import TasksAPI from 'dashboard/api/captain/tasks';
+import SpellCheckModal from './SpellCheckModal.vue';
 
 import { LOCAL_STORAGE_KEYS } from 'dashboard/constants/localStorage';
 import { LocalStorage } from 'shared/helpers/localStorage';
@@ -80,6 +82,7 @@ export default {
     QuotedEmailPreview,
     CopilotEditorSection,
     CopilotReplyBottomPanel,
+    SpellCheckModal,
   },
   mixins: [inboxMixin, fileUploadMixin, keyboardEventListenerMixins],
   props: {
@@ -141,6 +144,14 @@ export default {
       showArticleSearchPopover: false,
       hasRecordedAudio: false,
       copilotAcceptedMessages: {},
+      // Eltafouk: pre-send spell-check state. The trimmed body of the last
+      // message the agent explicitly approved (via the modal) is cached so
+      // we don't re-check the same text on every send keypress.
+      isSpellChecking: false,
+      showSpellCheckModal: false,
+      spellCheckOriginal: '',
+      spellCheckCorrected: '',
+      spellCheckApprovedHash: '',
     };
   },
   computed: {
@@ -744,10 +755,63 @@ export default {
     hideContentTemplatesModal() {
       this.showContentTemplatesModal = false;
     },
-    confirmOnSendReply() {
+    // Eltafouk: spell-check modal callbacks. Each path marks the chosen
+    // text as "already approved" before retrying the send so the second
+    // pass through confirmOnSendReply short-circuits the API call.
+    onSpellCheckSendCorrected(corrected) {
+      this.message = corrected;
+      this.spellCheckApprovedHash = (corrected || '').trim();
+      this.showSpellCheckModal = false;
+      this.confirmOnSendReply();
+    },
+    onSpellCheckSendOriginal(original) {
+      this.message = original;
+      this.spellCheckApprovedHash = (original || '').trim();
+      this.showSpellCheckModal = false;
+      this.confirmOnSendReply();
+    },
+    onSpellCheckEdit() {
+      // User wants to revise — keep the draft in the editor and close the
+      // modal; the next send will re-run the check on whatever they type.
+      this.showSpellCheckModal = false;
+    },
+    async confirmOnSendReply() {
       if (this.isReplyButtonDisabled) {
         return;
       }
+      if (this.showMentions) {
+        return;
+      }
+      // Eltafouk: pre-send spell/grammar guard. Skipped for private notes
+      // (only visible to agents internally), empty messages, and messages
+      // already approved via the modal in this session (the trimmed body
+      // is cached on `spellCheckApprovedHash`). Failure of the API call is
+      // fail-open — we never want a flaky LLM call to block agents from
+      // replying to a customer.
+      const trimmed = (this.message || '').trim();
+      const needsSpellCheck =
+        !this.isPrivate &&
+        trimmed.length > 0 &&
+        this.spellCheckApprovedHash !== trimmed;
+      if (needsSpellCheck) {
+        try {
+          this.isSpellChecking = true;
+          const { data } = await TasksAPI.spellCheck(trimmed);
+          if (data?.has_errors) {
+            this.spellCheckOriginal = data.original || trimmed;
+            this.spellCheckCorrected = data.corrected || trimmed;
+            this.showSpellCheckModal = true;
+            return;
+          }
+          this.spellCheckApprovedHash = trimmed;
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('[spell_check] request failed, sending unchecked', e);
+        } finally {
+          this.isSpellChecking = false;
+        }
+      }
+
       if (!this.showMentions) {
         const copilotAcceptedMessage = this.getCopilotAcceptedMessage();
         const isOnWhatsApp =
@@ -1441,6 +1505,17 @@ export default {
       ref="confirmDialog"
       :title="$t('CONVERSATION.REPLYBOX.UNDEFINED_VARIABLES.TITLE')"
       :description="undefinedVariableMessage"
+    />
+
+    <!-- Eltafouk: pre-send spell-check confirmation modal -->
+    <SpellCheckModal
+      :show="showSpellCheckModal"
+      :original="spellCheckOriginal"
+      :corrected="spellCheckCorrected"
+      @update:show="showSpellCheckModal = $event"
+      @send-corrected="onSpellCheckSendCorrected"
+      @send-original="onSpellCheckSendOriginal"
+      @edit="onSpellCheckEdit"
     />
   </div>
 </template>

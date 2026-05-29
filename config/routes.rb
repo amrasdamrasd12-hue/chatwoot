@@ -97,6 +97,7 @@ Rails.application.routes.draw do
               post :reply_suggestion
               post :label_suggestion
               post :follow_up
+              post :spell_check
             end
           end
           resource :saml_settings, only: [:show, :create, :update, :destroy]

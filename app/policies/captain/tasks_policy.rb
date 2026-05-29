@@ -18,4 +18,8 @@ class Captain::TasksPolicy < ApplicationPolicy
   def follow_up?
     true
   end
+
+  def spell_check?
+    true
+  end
 end

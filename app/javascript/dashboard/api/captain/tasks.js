@@ -102,6 +102,15 @@ class TasksAPI extends ApiClient {
       { signal }
     );
   }
+
+  /**
+   * Eltafouk: pre-send spell/grammar check. Returns
+   * { has_errors, original, corrected } so the reply box can render the
+   * confirmation modal only when the model actually rewrote something.
+   */
+  spellCheck(content, signal) {
+    return axios.post(`${this.url}/spell_check`, { content }, { signal });
+  }
 }
 
 export default new TasksAPI();
