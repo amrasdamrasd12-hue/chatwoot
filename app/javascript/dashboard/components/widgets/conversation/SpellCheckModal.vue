@@ -101,23 +101,61 @@ const rightWordsMap = computed(() => {
   return map;
 });
 
+// Defensive diff: small models occasionally skip a fix entry even when
+// they correct the word in `corrected`. Without backup detection the
+// real misspelling would render unhighlighted because nothing in
+// `wrongWordsMap` anchors on it. To avoid silent diffs we union the
+// model's explicit fixes with a word-set diff against the opposite
+// side — any word that exists on one side but is missing from the
+// other side is implicitly "changed" and gets a generic tooltip.
+const correctedCleanSet = computed(() => {
+  const s = new Set();
+  tokenize(props.corrected).forEach(t => {
+    const k = cleanWord(t);
+    if (k) s.add(k);
+  });
+  return s;
+});
+
+const originalCleanSet = computed(() => {
+  const s = new Set();
+  tokenize(props.original).forEach(t => {
+    const k = cleanWord(t);
+    if (k) s.add(k);
+  });
+  return s;
+});
+
+const FALLBACK_FIX = { wrong: '', right: '', why: 'خطأ إملائي', idx: 0 };
+
 const originalTokens = computed(() =>
   tokenize(props.original).map(tok => {
     const key = cleanWord(tok);
-    return {
-      text: tok,
-      fix: key ? wrongWordsMap.value.get(key) || null : null,
-    };
+    if (!key) return { text: tok, fix: null };
+    const explicit = wrongWordsMap.value.get(key);
+    if (explicit) return { text: tok, fix: explicit };
+    // Implicit change: word lives in original but doesn't survive into
+    // corrected — the model fixed it but forgot to list it.
+    if (!correctedCleanSet.value.has(key)) {
+      return { text: tok, fix: FALLBACK_FIX };
+    }
+    return { text: tok, fix: null };
   })
 );
 
 const correctedTokens = computed(() =>
   tokenize(props.corrected).map(tok => {
     const key = cleanWord(tok);
-    return {
-      text: tok,
-      fix: key ? rightWordsMap.value.get(key) || null : null,
-    };
+    if (!key) return { text: tok, fix: null };
+    const explicit = rightWordsMap.value.get(key);
+    if (explicit) return { text: tok, fix: explicit };
+    // Same idea on the corrected side: a word that appeared from
+    // nowhere is a fix the model didn't enumerate. Show it teal so
+    // the agent still sees what changed.
+    if (!originalCleanSet.value.has(key)) {
+      return { text: tok, fix: FALLBACK_FIX };
+    }
+    return { text: tok, fix: null };
   })
 );
 
