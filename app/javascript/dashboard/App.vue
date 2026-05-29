@@ -3,6 +3,9 @@ import { mapGetters } from 'vuex';
 import LoadingState from './components/widgets/LoadingState.vue';
 import NetworkNotification from './components/NetworkNotification.vue';
 import UpdateBanner from './components/app/UpdateBanner.vue';
+// Eltafouk: detects a fresh deploy and auto-reloads stale long-running
+// tabs so agents always run the latest bundle without a hard refresh.
+import NewVersionBanner from './components/NewVersionBanner.vue';
 import PaymentPendingBanner from './components/app/PaymentPendingBanner.vue';
 import PendingEmailVerificationBanner from './components/app/PendingEmailVerificationBanner.vue';
 import vueActionCable from './helper/actionCable';
@@ -30,6 +33,7 @@ export default {
     PaymentPendingBanner,
     WootSnackbarBox,
     PendingEmailVerificationBanner,
+    NewVersionBanner,
   },
   setup() {
     const router = useRouter();
@@ -135,6 +139,8 @@ export default {
     :dir="isRTL ? 'rtl' : 'ltr'"
   >
     <UpdateBanner :latest-chatwoot-version="latestChatwootVersion" />
+    <!-- Eltafouk: deploy-detection banner — auto-reloads stale tabs. -->
+    <NewVersionBanner />
     <template v-if="currentAccountId">
       <PendingEmailVerificationBanner v-if="hideOnOnboardingView" />
       <PaymentPendingBanner v-if="hideOnOnboardingView" />

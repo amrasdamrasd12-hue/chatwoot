@@ -39,6 +39,10 @@ Rails.application.routes.draw do
   get '/api', to: 'api#index'
   namespace :api, defaults: { format: 'json' } do
     namespace :v1 do
+      # Eltafouk: public build-version probe used by the dashboard to
+      # detect a fresh deploy and auto-reload stale long-running tabs.
+      resource :build_version, only: [:show], controller: 'build_version'
+
       # ----------------------------------
       # start of account scoped api routes
       resources :accounts, only: [:create, :show, :update] do
