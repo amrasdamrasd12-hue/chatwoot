@@ -173,6 +173,12 @@ export default {
       spellCheckCache: new Map(),
       spellCheckInFlight: null,
       debouncedSpellCheckPrefetch: () => {},
+      // Eltafouk: race guard against double-Enter. Without this, two
+      // confirmOnSendReply invocations can sit on the same spell_check
+      // await; the first one wins, clears this.message, then the
+      // laggards try to send an empty payload that WhatsApp rejects
+      // with "text.body is required".
+      isSendInProgress: false,
     };
   },
   computed: {
@@ -248,6 +254,10 @@ export default {
       return this.maxLength - this.message.length;
     },
     isReplyButtonDisabled() {
+      // Eltafouk: disable the send button visually while a previous send
+      // is still in flight, so the agent sees feedback that their click
+      // landed and stops mashing Enter.
+      if (this.isSendInProgress) return true;
       if (this.isEditorDisabled) return true;
       if (this.isATwitterInbox) return true;
       if (this.hasAttachments || this.hasRecordedAudio) return false;
@@ -861,104 +871,127 @@ export default {
       this.showSpellCheckModal = false;
     },
     async confirmOnSendReply() {
+      // Eltafouk: race guard. A double-Enter (or any rapid re-entry while
+      // the spell-check await is in flight) would otherwise stack two
+      // concurrent confirmOnSendReply invocations on the same draft. The
+      // first one finishes and calls clearMessage(); the second one
+      // resumes after its await with this.message already wiped and
+      // sends an empty body, which WhatsApp rejects ("text.body is
+      // required"). The lock dedupes the click — the second tap is
+      // silently dropped instead of producing a phantom failed message.
+      if (this.isSendInProgress) {
+        return;
+      }
       if (this.isReplyButtonDisabled) {
         return;
       }
       if (this.showMentions) {
         return;
       }
-      // Eltafouk: pre-send spell/grammar guard. Skipped for private notes
-      // (only visible to agents internally), empty messages, and the
-      // single send immediately after the modal resolves (`bypassOnce`).
-      //
-      // We deliberately re-check on every send — including identical text
-      // — so the agent can't accidentally bypass corrections by sending
-      // the same draft twice. The single-use bypass is only there to
-      // prevent the recursive `confirmOnSendReply()` call from re-opening
-      // the modal in an infinite loop right after the agent picks an
-      // option.
-      //
-      // Cache strategy: the debounced typing-time prefetcher usually has
-      // a result already cached by the time the agent clicks send, so the
-      // modal opens instantly. If the cache misses, we await the in-flight
-      // prefetch when it's for the same content; otherwise fall back to a
-      // fresh blocking call. Failure is fail-open.
-      const trimmed = (this.message || '').trim();
-      // Honor the account-level DM toggle — when an admin disables the
-      // guard for DM messages the modal stays out of the agent's way and
-      // we never hit the LLM endpoint at all.
-      const dmEnabled = this.spellCheckSettingsStore?.isDmEnabled !== false;
-      const needsSpellCheck =
-        dmEnabled &&
-        !this.isPrivate &&
-        trimmed.length > 0 &&
-        !this.spellCheckBypassOnce;
-      // Consume the bypass flag whether or not we ran a check — it's a
-      // single-use token, never persists past this confirm.
-      this.spellCheckBypassOnce = false;
-      if (needsSpellCheck) {
-        let data = this.spellCheckCache.get(trimmed);
-        if (
-          !data &&
-          this.spellCheckInFlight?.trimmed === trimmed &&
-          this.spellCheckInFlight?.promise
-        ) {
-          try {
-            this.isSpellChecking = true;
-            data = await this.spellCheckInFlight.promise;
-          } finally {
-            this.isSpellChecking = false;
+
+      this.isSendInProgress = true;
+      try {
+        // Eltafouk: pre-send spell/grammar guard. Skipped for private
+        // notes (only visible to agents internally), empty messages, and
+        // the single send immediately after the modal resolves
+        // (`bypassOnce`).
+        //
+        // We deliberately re-check on every send — including identical
+        // text — so the agent can't accidentally bypass corrections by
+        // sending the same draft twice. The single-use bypass is only
+        // there to prevent the recursive `confirmOnSendReply()` call
+        // from re-opening the modal in an infinite loop right after the
+        // agent picks an option.
+        //
+        // Cache strategy: the debounced typing-time prefetcher usually
+        // has a result already cached by the time the agent clicks send,
+        // so the modal opens instantly. If the cache misses, we await
+        // the in-flight prefetch when it's for the same content;
+        // otherwise fall back to a fresh blocking call. Failure is
+        // fail-open.
+        const trimmed = (this.message || '').trim();
+        // Honor the account-level DM toggle — when an admin disables the
+        // guard for DM messages the modal stays out of the agent's way
+        // and we never hit the LLM endpoint at all.
+        const dmEnabled = this.spellCheckSettingsStore?.isDmEnabled !== false;
+        const needsSpellCheck =
+          dmEnabled &&
+          !this.isPrivate &&
+          trimmed.length > 0 &&
+          !this.spellCheckBypassOnce;
+        // Consume the bypass flag whether or not we ran a check — it's a
+        // single-use token, never persists past this confirm.
+        this.spellCheckBypassOnce = false;
+        if (needsSpellCheck) {
+          let data = this.spellCheckCache.get(trimmed);
+          if (
+            !data &&
+            this.spellCheckInFlight?.trimmed === trimmed &&
+            this.spellCheckInFlight?.promise
+          ) {
+            try {
+              this.isSpellChecking = true;
+              data = await this.spellCheckInFlight.promise;
+            } finally {
+              this.isSpellChecking = false;
+            }
+          }
+          if (!data) {
+            try {
+              this.isSpellChecking = true;
+              data = await this.runBackgroundSpellCheck(trimmed);
+            } finally {
+              this.isSpellChecking = false;
+            }
+          }
+          if (data?.has_errors) {
+            this.spellCheckOriginal = data.original || trimmed;
+            this.spellCheckCorrected = data.corrected || trimmed;
+            this.spellCheckFixes = Array.isArray(data.fixes) ? data.fixes : [];
+            this.spellCheckEventId = data.event_id || null;
+            this.showSpellCheckModal = true;
+            return;
           }
         }
-        if (!data) {
-          try {
-            this.isSpellChecking = true;
-            data = await this.runBackgroundSpellCheck(trimmed);
-          } finally {
-            this.isSpellChecking = false;
+
+        if (!this.showMentions) {
+          const copilotAcceptedMessage = this.getCopilotAcceptedMessage();
+          const isOnWhatsApp =
+            this.isATwilioWhatsAppChannel ||
+            this.isAWhatsAppCloudChannel ||
+            this.is360DialogWhatsAppChannel;
+          // When users send messages containing both text and attachments on Instagram, Instagram treats them as separate messages.
+          // Although Chatwoot combines these into a single message, Instagram sends separate echo events for each component.
+          // This can create duplicate messages in Chatwoot. To prevent this issue, we'll handle text and attachments as separate messages.
+          const isOnInstagram = this.isAnInstagramChannel;
+          if ((isOnWhatsApp || isOnInstagram) && !this.isPrivate) {
+            this.sendMessageAsMultipleMessages(
+              this.message,
+              copilotAcceptedMessage
+            );
+          } else {
+            const messagePayload = this.getMessagePayload(this.message);
+            this.sendMessage(
+              messagePayload,
+              this.message,
+              copilotAcceptedMessage
+            );
           }
-        }
-        if (data?.has_errors) {
-          this.spellCheckOriginal = data.original || trimmed;
-          this.spellCheckCorrected = data.corrected || trimmed;
-          this.spellCheckFixes = Array.isArray(data.fixes) ? data.fixes : [];
-          this.spellCheckEventId = data.event_id || null;
-          this.showSpellCheckModal = true;
-          return;
-        }
-      }
 
-      if (!this.showMentions) {
-        const copilotAcceptedMessage = this.getCopilotAcceptedMessage();
-        const isOnWhatsApp =
-          this.isATwilioWhatsAppChannel ||
-          this.isAWhatsAppCloudChannel ||
-          this.is360DialogWhatsAppChannel;
-        // When users send messages containing both text and attachments on Instagram, Instagram treats them as separate messages.
-        // Although Chatwoot combines these into a single message, Instagram sends separate echo events for each component.
-        // This can create duplicate messages in Chatwoot. To prevent this issue, we'll handle text and attachments as separate messages.
-        const isOnInstagram = this.isAnInstagramChannel;
-        if ((isOnWhatsApp || isOnInstagram) && !this.isPrivate) {
-          this.sendMessageAsMultipleMessages(
-            this.message,
-            copilotAcceptedMessage
-          );
-        } else {
-          const messagePayload = this.getMessagePayload(this.message);
-          this.sendMessage(
-            messagePayload,
-            this.message,
-            copilotAcceptedMessage
-          );
-        }
+          if (!this.isPrivate) {
+            this.clearEmailField();
+          }
 
-        if (!this.isPrivate) {
-          this.clearEmailField();
+          this.clearMessage();
+          this.hideEmojiPicker();
+          this.$emit('update:popOutReplyBox', false);
         }
-
-        this.clearMessage();
-        this.hideEmojiPicker();
-        this.$emit('update:popOutReplyBox', false);
+      } finally {
+        // Release the lock even if anything above threw. Always done in
+        // the same tick the send-or-modal completes; the modal callbacks
+        // call confirmOnSendReply() recursively and will see the flag
+        // already cleared by this finally.
+        this.isSendInProgress = false;
       }
     },
     sendMessageAsMultipleMessages(message, copilotAcceptedMessage = '') {
