@@ -613,6 +613,12 @@ const menuItems = computed(() => {
           label: t('SIDEBAR.REPORTS_BOT'),
           to: accountScopedRoute('bot_reports'),
         },
+        // Eltafouk: per-agent spell-check audit + comparison report.
+        {
+          name: 'Reports Spell Check',
+          label: t('SIDEBAR.REPORTS_SPELL_CHECK'),
+          to: accountScopedRoute('spell_check_reports'),
+        },
       ],
     },
     {

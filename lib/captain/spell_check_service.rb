@@ -1,5 +1,14 @@
 class Captain::SpellCheckService < Captain::BaseTaskService
-  pattr_initialize [:account!, :content!]
+  # Optional context for the audit log row created on every call. The
+  # controller passes user_id/conversation_id/inbox_id/surface so the
+  # reports page can break events down by agent and channel.
+  pattr_initialize [
+    :account!,
+    :content!,
+    { user_id: nil, conversation_id: nil, inbox_id: nil, surface: 'dm' }
+  ]
+
+  attr_reader :event_id
 
   # Eltafouk: pre-send spell/grammar guard. Runs on every outgoing send so
   # latency dominates UX. Default `gpt-4.1-nano` (cheapest non-reasoning
@@ -37,7 +46,9 @@ class Captain::SpellCheckService < Captain::BaseTaskService
     response = make_api_call(model: model_to_use, messages: messages)
     return response if response.is_a?(Hash) && response[:error]
 
-    parse_response(response[:message].to_s)
+    result = parse_response(response[:message].to_s)
+    record_event(model_to_use, result)
+    result.merge(event_id: @event_id)
   end
 
   private
@@ -139,6 +150,34 @@ class Captain::SpellCheckService < Captain::BaseTaskService
 
   def empty_result
     { has_errors: false, original: content, corrected: content, fixes: [] }
+  end
+
+  # Log one row per *real* LLM call. Decision starts as "pending" when
+  # has_errors=true (the client finalises it after the modal closes), or
+  # "no_errors_send" otherwise (no modal will open, the send proceeds).
+  # Wrapped in rescue so an audit-log failure can never break a customer
+  # reply — we'd rather lose a stat than block an agent.
+  def record_event(model_used, result)
+    fixes_count = Array(result[:fixes]).size
+    decision = result[:has_errors] ? 'pending' : 'no_errors_send'
+
+    event = account.spell_check_events.create!(
+      user_id: user_id,
+      conversation_id: conversation_id,
+      inbox_id: inbox_id,
+      surface: surface,
+      strictness: strictness,
+      model_used: model_used,
+      has_errors: result[:has_errors] ? true : false,
+      errors_count: fixes_count,
+      original_length: content.to_s.length,
+      corrected_length: result[:corrected].to_s.length,
+      decision: decision
+    )
+    @event_id = event.id
+  rescue StandardError => e
+    Rails.logger.warn "[spell_check] event log failed: #{e.message[0, 120]}"
+    @event_id = nil
   end
 
   def equivalent?(a, b)

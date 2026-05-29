@@ -168,6 +168,7 @@ export default {
       spellCheckOriginal: '',
       spellCheckCorrected: '',
       spellCheckFixes: [],
+      spellCheckEventId: null,
       spellCheckBypassOnce: false,
       spellCheckCache: new Map(),
       spellCheckInFlight: null,
@@ -806,7 +807,7 @@ export default {
     // click can await the same in-flight request rather than starting a
     // duplicate one.
     runBackgroundSpellCheck(trimmed) {
-      const promise = TasksAPI.spellCheck(trimmed, 'dm')
+      const promise = TasksAPI.spellCheck(trimmed, 'dm', this.currentChat?.id)
         .then(({ data }) => {
           this.spellCheckCache.set(trimmed, data);
           return data;
@@ -830,19 +831,31 @@ export default {
     // to that call. The next send (even for identical text) will run
     // a fresh check; agents asked to be re-prompted every time so they
     // can't accidentally bypass a typo by sending twice.
+    // Eltafouk: tiny helper — fire the audit-log finalization in the
+    // background. Catch and discard errors; an audit miss must never
+    // delay the actual reply.
+    finalizeSpellCheckDecision(decision) {
+      const eventId = this.spellCheckEventId;
+      this.spellCheckEventId = null;
+      if (!eventId) return;
+      TasksAPI.spellCheckDecision(eventId, decision).catch(() => {});
+    },
     onSpellCheckSendCorrected(corrected) {
+      this.finalizeSpellCheckDecision('corrected');
       this.message = corrected;
       this.spellCheckBypassOnce = true;
       this.showSpellCheckModal = false;
       this.confirmOnSendReply();
     },
     onSpellCheckSendOriginal(original) {
+      this.finalizeSpellCheckDecision('sent_original');
       this.message = original;
       this.spellCheckBypassOnce = true;
       this.showSpellCheckModal = false;
       this.confirmOnSendReply();
     },
     onSpellCheckEdit() {
+      this.finalizeSpellCheckDecision('edited');
       // User wants to revise — keep the draft in the editor and close the
       // modal; the next send will re-run the check on whatever they type.
       this.showSpellCheckModal = false;
@@ -909,6 +922,7 @@ export default {
           this.spellCheckOriginal = data.original || trimmed;
           this.spellCheckCorrected = data.corrected || trimmed;
           this.spellCheckFixes = Array.isArray(data.fixes) ? data.fixes : [];
+          this.spellCheckEventId = data.event_id || null;
           this.showSpellCheckModal = true;
           return;
         }

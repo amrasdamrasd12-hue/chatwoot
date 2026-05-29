@@ -382,7 +382,8 @@
     "SECURITY": "Security",
     "CAPTAIN_AI": "Captain",
     "CONVERSATION_WORKFLOW": "Conversation Workflow",
-    "SPELL_CHECK": "مدقق إملائي"
+    "SPELL_CHECK": "مدقق إملائي",
+    "REPORTS_SPELL_CHECK": "تقرير المدقق الإملائي"
   },
   "SPELL_CHECK_SETTINGS": {
     "TITLE": "المدقق الإملائي الذكي",

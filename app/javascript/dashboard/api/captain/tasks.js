@@ -110,12 +110,29 @@ class TasksAPI extends ApiClient {
    * matching toggle is off in the per-account settings — that way a
    * disabled surface costs zero LLM tokens.
    */
-  spellCheck(content, surface, signal) {
+  spellCheck(content, surface, conversationDisplayId, signal) {
     return axios.post(
       `${this.url}/spell_check`,
-      { content, surface: surface || 'dm' },
+      {
+        content,
+        surface: surface || 'dm',
+        conversation_display_id: conversationDisplayId,
+      },
       { signal }
     );
+  }
+
+  /**
+   * Eltafouk: fire-and-forget finalization of a spell-check event.
+   * Called by the modal callbacks (corrected / sent_original / edited)
+   * so the reports page can break down behaviour per agent.
+   */
+  spellCheckDecision(eventId, decision) {
+    if (!eventId) return Promise.resolve();
+    return axios.post(`${this.url}/spell_check_decision`, {
+      event_id: eventId,
+      decision,
+    });
   }
 }
 

@@ -22,4 +22,8 @@ class Captain::TasksPolicy < ApplicationPolicy
   def spell_check?
     true
   end
+
+  def spell_check_decision?
+    true
+  end
 end
