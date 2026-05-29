@@ -2,11 +2,13 @@ class Captain::SpellCheckService < Captain::BaseTaskService
   pattr_initialize [:account!, :content!]
 
   # Eltafouk: pre-send spell/grammar guard. Runs on every outgoing send, so
-  # latency dominates the agent's perceived UX. Picks the fastest available
-  # OpenAI model (gpt-4.1-nano, typical ≈300–500 ms) and pairs it with a
-  # purpose-built Arabic spell-check prompt (~30 tokens vs the 250-token
-  # generic Copilot prompt) so input-processing time stays tiny.
-  MODEL = 'gpt-4.1-nano'.freeze
+  # latency dominates the agent's perceived UX. gpt-5-nano is the cheapest
+  # OpenAI model as of May 2026 ($0.05/$0.40 per Mtok vs gpt-4.1-nano's
+  # $0.10/$0.40 — same output price, half the input price) with comparable
+  # quality on a constrained spelling/grammar task. Paired with the tight
+  # Arabic spell_check.liquid prompt (~30 tokens) so input-processing time
+  # stays minimal.
+  MODEL = 'gpt-5-nano'.freeze
 
   def perform
     stripped = content.to_s.strip
