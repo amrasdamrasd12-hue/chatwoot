@@ -153,6 +153,7 @@ export default {
       showSpellCheckModal: false,
       spellCheckOriginal: '',
       spellCheckCorrected: '',
+      spellCheckFixes: [],
       spellCheckApprovedHash: '',
       spellCheckCache: new Map(),
       spellCheckInFlight: null,
@@ -869,6 +870,7 @@ export default {
         if (data?.has_errors) {
           this.spellCheckOriginal = data.original || trimmed;
           this.spellCheckCorrected = data.corrected || trimmed;
+          this.spellCheckFixes = Array.isArray(data.fixes) ? data.fixes : [];
           this.showSpellCheckModal = true;
           return;
         }
@@ -1577,6 +1579,7 @@ export default {
       :show="showSpellCheckModal"
       :original="spellCheckOriginal"
       :corrected="spellCheckCorrected"
+      :fixes="spellCheckFixes"
       @update:show="showSpellCheckModal = $event"
       @send-corrected="onSpellCheckSendCorrected"
       @send-original="onSpellCheckSendOriginal"

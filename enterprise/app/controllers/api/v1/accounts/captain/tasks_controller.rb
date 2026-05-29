@@ -71,7 +71,8 @@ class Api::V1::Accounts::Captain::TasksController < Api::V1::Accounts::BaseContr
       render json: {
         has_errors: result[:has_errors] ? true : false,
         original: result[:original].to_s,
-        corrected: result[:corrected].to_s
+        corrected: result[:corrected].to_s,
+        fixes: Array(result[:fixes])
       }
     end
   end
