@@ -144,14 +144,19 @@ export default {
       showArticleSearchPopover: false,
       hasRecordedAudio: false,
       copilotAcceptedMessages: {},
-      // Eltafouk: pre-send spell-check state. The trimmed body of the last
-      // message the agent explicitly approved (via the modal) is cached so
-      // we don't re-check the same text on every send keypress.
+      // Eltafouk: pre-send spell-check state. We pre-fetch in the
+      // background while the agent types (debounced) so the modal opens
+      // instantly when they click send — the cache is keyed by the trimmed
+      // body. `spellCheckInFlight` lets a click that lands mid-pre-fetch
+      // reuse the in-flight promise instead of starting a new request.
       isSpellChecking: false,
       showSpellCheckModal: false,
       spellCheckOriginal: '',
       spellCheckCorrected: '',
       spellCheckApprovedHash: '',
+      spellCheckCache: new Map(),
+      spellCheckInFlight: null,
+      debouncedSpellCheckPrefetch: () => {},
     };
   },
   computed: {
@@ -492,6 +497,9 @@ export default {
     message() {
       // Autosave the current message draft.
       this.doAutoSaveDraft();
+      // Eltafouk: also kick off a background spell-check so the modal
+      // can open instantly on send instead of waiting on a fresh API call.
+      this.debouncedSpellCheckPrefetch();
     },
     replyType(updatedReplyType, oldReplyType) {
       this.setToDraft(this.conversationIdByRoute, oldReplyType);
@@ -513,6 +521,20 @@ export default {
       500,
       true
     );
+
+    // Eltafouk: pre-fetch the spell check 700 ms after the agent stops
+    // typing. Result lands in `spellCheckCache` keyed by trimmed body so
+    // `confirmOnSendReply` can read it instantly. Skip private notes and
+    // very short drafts (a <3-char message is almost always intentional
+    // and not worth the LLM round-trip).
+    this.debouncedSpellCheckPrefetch = debounce(() => {
+      if (this.isPrivate) return;
+      const trimmed = (this.message || '').trim();
+      if (trimmed.length < 3) return;
+      if (this.spellCheckCache.has(trimmed)) return;
+      if (this.spellCheckInFlight?.trimmed === trimmed) return;
+      this.runBackgroundSpellCheck(trimmed);
+    }, 700);
 
     this.fetchAndSetReplyTo();
     emitter.on(BUS_EVENTS.TOGGLE_REPLY_TO_MESSAGE, this.fetchAndSetReplyTo);
@@ -755,6 +777,29 @@ export default {
     hideContentTemplatesModal() {
       this.showContentTemplatesModal = false;
     },
+    // Eltafouk: kick off a spell-check request in the background and
+    // populate the cache. Returns the promise so a near-simultaneous send
+    // click can await the same in-flight request rather than starting a
+    // duplicate one.
+    runBackgroundSpellCheck(trimmed) {
+      const promise = TasksAPI.spellCheck(trimmed)
+        .then(({ data }) => {
+          this.spellCheckCache.set(trimmed, data);
+          return data;
+        })
+        .catch(e => {
+          // eslint-disable-next-line no-console
+          console.warn('[spell_check] prefetch failed', e);
+          return null;
+        })
+        .finally(() => {
+          if (this.spellCheckInFlight?.trimmed === trimmed) {
+            this.spellCheckInFlight = null;
+          }
+        });
+      this.spellCheckInFlight = { trimmed, promise };
+      return promise;
+    },
     // Eltafouk: spell-check modal callbacks. Each path marks the chosen
     // text as "already approved" before retrying the send so the second
     // pass through confirmOnSendReply short-circuits the API call.
@@ -784,31 +829,49 @@ export default {
       }
       // Eltafouk: pre-send spell/grammar guard. Skipped for private notes
       // (only visible to agents internally), empty messages, and messages
-      // already approved via the modal in this session (the trimmed body
-      // is cached on `spellCheckApprovedHash`). Failure of the API call is
-      // fail-open — we never want a flaky LLM call to block agents from
-      // replying to a customer.
+      // already approved via the modal in this session.
+      //
+      // Cache strategy: the debounced typing-time prefetcher usually has
+      // a result already cached by the time the agent clicks send, so the
+      // modal opens instantly. If the cache misses, we await the in-flight
+      // prefetch when it's for the same content; otherwise fall back to a
+      // fresh blocking call. Failure is fail-open — we never block a send
+      // on a flaky LLM call.
       const trimmed = (this.message || '').trim();
       const needsSpellCheck =
         !this.isPrivate &&
         trimmed.length > 0 &&
         this.spellCheckApprovedHash !== trimmed;
       if (needsSpellCheck) {
-        try {
-          this.isSpellChecking = true;
-          const { data } = await TasksAPI.spellCheck(trimmed);
-          if (data?.has_errors) {
-            this.spellCheckOriginal = data.original || trimmed;
-            this.spellCheckCorrected = data.corrected || trimmed;
-            this.showSpellCheckModal = true;
-            return;
+        let data = this.spellCheckCache.get(trimmed);
+        if (
+          !data &&
+          this.spellCheckInFlight?.trimmed === trimmed &&
+          this.spellCheckInFlight?.promise
+        ) {
+          try {
+            this.isSpellChecking = true;
+            data = await this.spellCheckInFlight.promise;
+          } finally {
+            this.isSpellChecking = false;
           }
+        }
+        if (!data) {
+          try {
+            this.isSpellChecking = true;
+            data = await this.runBackgroundSpellCheck(trimmed);
+          } finally {
+            this.isSpellChecking = false;
+          }
+        }
+        if (data?.has_errors) {
+          this.spellCheckOriginal = data.original || trimmed;
+          this.spellCheckCorrected = data.corrected || trimmed;
+          this.showSpellCheckModal = true;
+          return;
+        }
+        if (data) {
           this.spellCheckApprovedHash = trimmed;
-        } catch (e) {
-          // eslint-disable-next-line no-console
-          console.warn('[spell_check] request failed, sending unchecked', e);
-        } finally {
-          this.isSpellChecking = false;
         }
       }
 

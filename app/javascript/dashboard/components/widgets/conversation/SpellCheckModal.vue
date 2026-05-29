@@ -206,11 +206,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
           <span
             v-for="(tok, i) in originalTokens"
             :key="`o-${i}`"
-            :class="
-              tok.changed
-                ? 'text-n-ruby-11 line-through decoration-n-ruby-9 decoration-[1.5px] underline-offset-2'
-                : ''
-            "
+            :class="tok.changed ? 'font-semibold text-n-ruby-11' : ''"
           >
             {{ tok.text }}
           </span>
