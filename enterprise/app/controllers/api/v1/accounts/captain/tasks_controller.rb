@@ -54,13 +54,26 @@ class Api::V1::Accounts::Captain::TasksController < Api::V1::Accounts::BaseContr
   # Eltafouk: pre-send spell-check gate. Called by the dashboard reply box
   # before every outgoing send so the agent can confirm a corrected version
   # when the model finds spelling/grammar issues.
+  #
+  # We bypass `render_result` here because that helper only knows about the
+  # generic `{ message: ... }` task response shape — it would silently drop
+  # the `has_errors` / `original` / `corrected` fields the reply box needs
+  # to decide whether to open the modal.
   def spell_check
     result = Captain::SpellCheckService.new(
       account: Current.account,
       content: params[:content].to_s
     ).perform
 
-    render_result(result)
+    if result[:error]
+      render json: { error: result[:error] }, status: :unprocessable_entity
+    else
+      render json: {
+        has_errors: result[:has_errors] ? true : false,
+        original: result[:original].to_s,
+        corrected: result[:corrected].to_s
+      }
+    end
   end
 
   private
