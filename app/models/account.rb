@@ -74,7 +74,11 @@ class Account < ApplicationRecord
           'properties': {
             'dm_enabled': { 'type': %w[boolean null] },
             'comments_enabled': { 'type': %w[boolean null] },
-            'strictness': { 'type': %w[integer null], 'minimum': 1, 'maximum': 6 }
+            'strictness': { 'type': %w[integer null], 'minimum': 1, 'maximum': 6 },
+            'long_message_strategy': {
+              'type': %w[string null],
+              'enum': %w[skip nano mini hybrid]
+            }
           },
           'additionalProperties': false
         }

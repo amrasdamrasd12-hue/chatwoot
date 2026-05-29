@@ -2,10 +2,16 @@ class Captain::SpellCheckService < Captain::BaseTaskService
   pattr_initialize [:account!, :content!]
 
   # Eltafouk: pre-send spell/grammar guard. Runs on every outgoing send so
-  # latency dominates UX. gpt-4.1-nano is OpenAI's cheapest non-reasoning
-  # model and pairs well with the parameterised Arabic spell_check.liquid
-  # prompt — keeping per-call processing time minimal.
-  MODEL = 'gpt-4.1-nano'.freeze
+  # latency dominates UX. Default `gpt-4.1-nano` (cheapest non-reasoning
+  # OpenAI model) handles ~95% of real-world replies; for long messages
+  # the admin can opt into `gpt-4.1-mini` via the per-account
+  # `long_message_strategy` setting because nano loses focus past ~500
+  # characters and starts missing obvious typos.
+  NANO_MODEL = 'gpt-4.1-nano'.freeze
+  MINI_MODEL = 'gpt-4.1-mini'.freeze
+  LONG_MESSAGE_THRESHOLD = 500
+  VALID_STRATEGIES = %w[skip nano mini hybrid].freeze
+  DEFAULT_STRATEGY = 'skip'.freeze
 
   # Per-account strictness selector. The Liquid template branches on this
   # integer so each level emits a different rulebook to the model. Default
@@ -25,7 +31,10 @@ class Captain::SpellCheckService < Captain::BaseTaskService
     stripped = content.to_s.strip
     return empty_result if stripped.empty?
 
-    response = make_api_call(model: MODEL, messages: messages)
+    model_to_use = pick_model(stripped)
+    return empty_result if model_to_use.nil?  # strategy: skip
+
+    response = make_api_call(model: model_to_use, messages: messages)
     return response if response.is_a?(Hash) && response[:error]
 
     parse_response(response[:message].to_s)
@@ -36,6 +45,28 @@ class Captain::SpellCheckService < Captain::BaseTaskService
   def strictness
     raw = account.spell_check_settings.to_h['strictness'].to_i
     raw.between?(1, 6) ? raw : DEFAULT_STRICTNESS
+  end
+
+  def strategy
+    raw = account.spell_check_settings.to_h['long_message_strategy'].to_s
+    VALID_STRATEGIES.include?(raw) ? raw : DEFAULT_STRATEGY
+  end
+
+  # Strategy switch — runs once per call so we don't pay LLM cost twice:
+  #   skip   → no check at all on long messages, nano on short
+  #   nano   → cheap+fast everywhere (loses focus past ~500 chars)
+  #   mini   → high quality everywhere (5× cost, ~2× latency)
+  #   hybrid → nano under the threshold, mini above it
+  # Returns the model name to call, or nil to skip the API call entirely.
+  def pick_model(stripped)
+    long = stripped.length >= LONG_MESSAGE_THRESHOLD
+    case strategy
+    when 'skip' then long ? nil : NANO_MODEL
+    when 'nano' then NANO_MODEL
+    when 'mini' then MINI_MODEL
+    when 'hybrid' then long ? MINI_MODEL : NANO_MODEL
+    else NANO_MODEL
+    end
   end
 
   def system_prompt

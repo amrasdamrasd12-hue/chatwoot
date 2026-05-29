@@ -11,6 +11,7 @@ export const useSpellCheckSettingsStore = defineStore('spellCheckSettings', {
       dm_enabled: true,
       comments_enabled: false,
       strictness: 3,
+      long_message_strategy: 'skip',
     },
     strictnessLabels: {
       1: 'سطحي جداً',
@@ -20,6 +21,7 @@ export const useSpellCheckSettingsStore = defineStore('spellCheckSettings', {
       5: 'صارم',
       6: 'صارم جداً',
     },
+    longMessageThreshold: 500,
     uiFlags: {
       isFetching: false,
       isUpdating: false,
@@ -30,6 +32,7 @@ export const useSpellCheckSettingsStore = defineStore('spellCheckSettings', {
   getters: {
     getSettings: state => state.settings,
     getStrictnessLabels: state => state.strictnessLabels,
+    getLongMessageThreshold: state => state.longMessageThreshold,
     getUIFlags: state => state.uiFlags,
     isDmEnabled: state => state.settings.dm_enabled !== false,
     isCommentsEnabled: state => state.settings.comments_enabled === true,
@@ -44,6 +47,9 @@ export const useSpellCheckSettingsStore = defineStore('spellCheckSettings', {
         this.settings = response.data.settings || this.settings;
         if (response.data.strictness_labels) {
           this.strictnessLabels = response.data.strictness_labels;
+        }
+        if (response.data.long_message_threshold) {
+          this.longMessageThreshold = response.data.long_message_threshold;
         }
         this.uiFlags.loaded = true;
       } catch (error) {
@@ -60,6 +66,9 @@ export const useSpellCheckSettingsStore = defineStore('spellCheckSettings', {
         this.settings = response.data.settings || this.settings;
         if (response.data.strictness_labels) {
           this.strictnessLabels = response.data.strictness_labels;
+        }
+        if (response.data.long_message_threshold) {
+          this.longMessageThreshold = response.data.long_message_threshold;
         }
       } finally {
         this.uiFlags.isUpdating = false;
