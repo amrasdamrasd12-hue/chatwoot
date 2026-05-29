@@ -709,7 +709,16 @@ function handleLineBreakWhenCmdAndEnterToSendEnabled(event) {
 
 function getEditorPlainText() {
   if (!editorView) return '';
-  return editorView.state.doc.textContent;
+  const { doc, selection } = editorView.state;
+  // Only the current line up to the cursor. doc.textContent flattens the whole
+  // doc with no separator, and Shift+Enter inserts " " + hardBreak (see
+  // @chatwoot/prosemirror-schema keymap), so prior-line digits bleed into the
+  // captured expression and break evaluate(). Treat paragraph boundaries and
+  // hardBreaks as line breaks, then keep only the segment after the last break.
+  const text = doc.textBetween(0, selection.from, '\n', node =>
+    node.type.name === 'hard_break' ? '\n' : ''
+  );
+  return text.split('\n').pop();
 }
 
 function replaceExprWithResult(expr, result) {
@@ -725,8 +734,10 @@ function replaceExprWithResult(expr, result) {
   // (which detectCalcExpression already normalised to ASCII) matches even when
   // the user typed ١٢+٥= or ١٠٠-٢٠٪=. Character lengths are identical so `idx`
   // maps directly to the original text node position.
+  // Don't stop at the first match — when the same expression appears on an
+  // earlier line (e.g. `تست ٦*٦= ٣٦` above the cursor's `٦*٦=`), iterate every
+  // text node so the LAST occurrence in document order wins.
   doc.descendants((node, pos) => {
-    if (fromPos !== null) return false;
     if (!node.isText) return true;
     const normalized = normalizeDigits(node.text).replace(/٪/g, '%');
     const idx = normalized.lastIndexOf(target);
@@ -758,8 +769,10 @@ function insertResultAfterEquals(expr, result) {
   let eqPos = null;
   let originalText = null;
 
+  // Iterate every text node so the LAST occurrence in document order wins
+  // (same reason as replaceExprWithResult: a prior line may contain the
+  // expression and we must not insert the result there).
   doc.descendants((node, pos) => {
-    if (eqPos !== null) return false;
     if (!node.isText) return true;
     const normalized = normalizeDigits(node.text).replace(/٪/g, '%');
     const idx = normalized.lastIndexOf(target);
