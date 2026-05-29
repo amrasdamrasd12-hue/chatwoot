@@ -194,14 +194,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
           <span v-for="(tok, i) in correctedTokens" :key="`c-${i}`">
             <span
               v-if="tok.fix"
-              v-tooltip.top="tok.fix.why"
               :title="tok.fix.why"
-              class="relative cursor-help rounded-md bg-n-teal-4 px-1.5 py-px font-bold text-n-teal-12 ring-1 ring-inset ring-n-teal-7/50 transition-colors hover:bg-n-teal-5"
+              class="group/fix relative inline-block cursor-help rounded-md bg-n-teal-4 px-1.5 py-px font-bold text-n-teal-12 ring-1 ring-inset ring-n-teal-7/50 transition-colors hover:bg-n-teal-5"
             >
-              <sup class="me-px font-mono text-[10px] font-normal opacity-55">
-                {{ tok.fix.idx }}
-              </sup>
               {{ tok.text }}
+              <span
+                class="pointer-events-none absolute bottom-full start-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg bg-n-slate-12 px-2.5 py-1.5 text-[12px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/fix:opacity-100 rtl:translate-x-1/2"
+              >
+                {{ tok.fix.why }}
+                <span
+                  class="absolute top-full start-1/2 -translate-x-1/2 border-[5px] border-x-transparent border-b-transparent border-t-n-slate-12 rtl:translate-x-1/2"
+                  aria-hidden="true"
+                />
+              </span>
             </span>
             <template v-else>
               {{ tok.text }}
@@ -232,14 +237,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
           <span v-for="(tok, i) in originalTokens" :key="`o-${i}`">
             <span
               v-if="tok.fix"
-              v-tooltip.top="tok.fix.why"
               :title="tok.fix.why"
-              class="relative cursor-help rounded-md bg-n-ruby-3 px-1.5 py-px font-bold text-n-ruby-12 underline decoration-n-ruby-9 decoration-2 underline-offset-[5px] ring-1 ring-inset ring-n-ruby-7/50 transition-colors hover:bg-n-ruby-4"
+              class="group/fix relative inline-block cursor-help rounded-md bg-n-ruby-3 px-1.5 py-px font-bold text-n-ruby-12 ring-1 ring-inset ring-n-ruby-7/50 transition-colors hover:bg-n-ruby-4"
             >
-              <sup class="me-px font-mono text-[10px] font-normal opacity-55">
-                {{ tok.fix.idx }}
-              </sup>
               {{ tok.text }}
+              <span
+                class="pointer-events-none absolute bottom-full start-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg bg-n-slate-12 px-2.5 py-1.5 text-[12px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/fix:opacity-100 rtl:translate-x-1/2"
+              >
+                {{ tok.fix.why }}
+                <span
+                  class="absolute top-full start-1/2 -translate-x-1/2 border-[5px] border-x-transparent border-b-transparent border-t-n-slate-12 rtl:translate-x-1/2"
+                  aria-hidden="true"
+                />
+              </span>
             </span>
             <template v-else>
               {{ tok.text }}
