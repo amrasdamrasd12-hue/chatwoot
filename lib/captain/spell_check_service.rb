@@ -95,24 +95,38 @@ class Captain::SpellCheckService < Captain::BaseTaskService
     ]
   end
 
+  # JSON metadata fragments the model occasionally leaks into the
+  # user-facing "corrected" string when it loses focus on a long input.
+  # Spotting any of these means we shouldn't show that text to the agent.
+  JSON_LEAK_RE = /
+    "corrected"\s*:|
+    "fixes"\s*:|
+    "wrong"\s*:|
+    "right"\s*:|
+    "why"\s*:
+  /x
+
   # The prompt asks for JSON of shape
   #   { "corrected": "...", "fixes": [{ "wrong", "right", "why" }, ...] }
-  # but small models occasionally wrap the JSON in code fences or stray
-  # prose. We extract the first JSON object found and fall back to a
-  # "treat the whole response as plain corrected text" path so a sloppy
-  # model response can still drive the modal correctly.
+  # nano can fail to honour that on long inputs — typically it starts
+  # writing the corrected text as plain prose and only emits a JSON
+  # fragment at the tail end. We refuse to render those garbled
+  # responses to the agent; treating the message as clean is much safer
+  # than surfacing raw JSON in the modal.
   def parse_response(raw)
     parsed = extract_json(raw)
-    if parsed.nil?
-      return {
-        has_errors: !equivalent?(content, raw),
-        original: content,
-        corrected: raw,
-        fixes: []
-      }
+    if parsed.nil? || !parsed.is_a?(Hash) || parsed['corrected'].nil?
+      Rails.logger.warn "[spell_check] malformed JSON (len=#{raw.length}): #{raw[0, 120]}"
+      return safe_no_errors_result
     end
 
-    corrected = (parsed['corrected'] || raw).to_s
+    corrected = parsed['corrected'].to_s
+
+    if corrected.match?(JSON_LEAK_RE)
+      Rails.logger.warn "[spell_check] JSON leaked into corrected text: #{corrected[0, 120]}"
+      return safe_no_errors_result
+    end
+
     fixes = Array(parsed['fixes']).filter_map do |fix|
       next unless fix.is_a?(Hash)
 
@@ -136,6 +150,13 @@ class Captain::SpellCheckService < Captain::BaseTaskService
       corrected: corrected,
       fixes: fixes
     }
+  end
+
+  # Drop-in result for malformed model output. Better to silently pass
+  # the message through (the customer gets the original, untouched) than
+  # to show the agent a broken modal full of JSON syntax.
+  def safe_no_errors_result
+    { has_errors: false, original: content, corrected: content, fixes: [] }
   end
 
   def extract_json(raw)
