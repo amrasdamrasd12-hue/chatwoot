@@ -127,6 +127,17 @@ class Captain::SpellCheckService < Captain::BaseTaskService
       return safe_no_errors_result
     end
 
+    # If the model claimed fixes but the corrected string is byte-for-
+    # byte equivalent to the original (after whitespace normalisation),
+    # the fixes are ghosts — the model imagined a problem but didn't
+    # actually rewrite anything. Opening a modal in this case shows two
+    # identical blocks and confuses the agent ("which letter is wrong?
+    # they look the same"). Treat as a clean message.
+    if equivalent?(content, corrected)
+      Rails.logger.warn '[spell_check] ghost fixes — corrected matches original verbatim'
+      return safe_no_errors_result
+    end
+
     fixes = Array(parsed['fixes']).filter_map do |fix|
       next unless fix.is_a?(Hash)
 
