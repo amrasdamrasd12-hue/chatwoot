@@ -7,6 +7,8 @@ import { useBuildVersionWatcher } from 'dashboard/composables/useBuildVersionWat
 // if the agent stops typing for 30 s we silently refresh; otherwise we
 // hard-refresh after 10 min regardless so the tab can't outlive the
 // bundle.
+//
+// Test deploy 2026-05-29 — verify auto-reload reaches Noha's live tab.
 const IDLE_RELOAD_AFTER_MS = 30 * 1000;
 const FORCE_RELOAD_AFTER_MS = 10 * 60 * 1000;
 const TICK_MS = 5_000;
