@@ -25,6 +25,8 @@ import LiveReports from './LiveReports.vue';
 import SLAReports from './SLAReports.vue';
 // Eltafouk: per-agent spell-check audit report.
 import SpellCheckReport from './SpellCheckReport.vue';
+// Eltafouk: per-agent activity report (replies / channels / shift / speed).
+import AgentActivityReport from './AgentActivityReport.vue';
 
 const meta = {
   featureFlag: FEATURE_FLAGS.REPORTS,
@@ -175,6 +177,12 @@ export default {
           name: 'spell_check_reports',
           meta: { permissions: ['administrator', 'report_manage'] },
           component: SpellCheckReport,
+        },
+        {
+          path: 'agent-activity',
+          name: 'agent_activity_reports',
+          meta: { permissions: ['administrator', 'report_manage'] },
+          component: AgentActivityReport,
         },
       ],
     },

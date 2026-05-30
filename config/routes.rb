@@ -111,6 +111,9 @@ Rails.application.routes.draw do
           resource :spell_check_settings, only: [:show, :update]
           # Eltafouk: aggregated per-agent spell-check audit reports.
           resources :spell_check_reports, only: [:index]
+          # Eltafouk: per-agent activity report (DM + comment replies,
+          # channels, detected shift, in-shift response time).
+          resources :agent_activity_reports, only: [:index]
           resources :agent_bots, only: [:index, :create, :show, :update, :destroy] do
             delete :avatar, on: :member
             post :reset_access_token, on: :member

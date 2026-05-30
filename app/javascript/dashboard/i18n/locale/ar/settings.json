@@ -380,7 +380,8 @@
     "DOCS": "قراءة المستندات",
     "SECURITY": "Security",
     "SPELL_CHECK": "مدقق إملائي",
-    "REPORTS_SPELL_CHECK": "تقرير المدقق الإملائي"
+    "REPORTS_SPELL_CHECK": "تقرير المدقق الإملائي",
+    "REPORTS_AGENT_ACTIVITY": "تقرير نشاط الموظفين"
   },
   "SPELL_CHECK_SETTINGS": {
     "TITLE": "المدقق الإملائي الذكي",

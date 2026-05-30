@@ -619,6 +619,12 @@ const menuItems = computed(() => {
           label: t('SIDEBAR.REPORTS_SPELL_CHECK'),
           to: accountScopedRoute('spell_check_reports'),
         },
+        // Eltafouk: per-agent activity report (replies / channels / shift).
+        {
+          name: 'Reports Agent Activity',
+          label: t('SIDEBAR.REPORTS_AGENT_ACTIVITY'),
+          to: accountScopedRoute('agent_activity_reports'),
+        },
       ],
     },
     {
