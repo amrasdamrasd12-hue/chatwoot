@@ -38,11 +38,19 @@ module Captain::SpellCheckCategorizer
   def letter_category(w_bare, r_bare)
     return 'hamza' if normalize_hamza(w_bare) == normalize_hamza(r_bare)
     return 'taa' if normalize_taa(w_bare) == normalize_taa(r_bare)
+    return 'taa' if taa_marbuta_diff?(w_bare, r_bare)
     return 'ya' if normalize_ya(w_bare) == normalize_ya(r_bare)
     return 'letter_extra' if w_bare.length > r_bare.length
     return 'letter_missing' if w_bare.length < r_bare.length
 
     'letter_wrong'
+  end
+
+  # A trailing taa-marbuta added or dropped (مدرس ↔ مدرسة، متوفر ↔ متوفرة) —
+  # a grammatical/agreement change, not a plain missing letter.
+  def taa_marbuta_diff?(first, second)
+    longer, shorter = first.length >= second.length ? [first, second] : [second, first]
+    longer.end_with?('ة') && longer[0...-1] == shorter
   end
 
   def strip_tashkeel(str)
