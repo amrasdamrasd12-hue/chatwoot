@@ -114,11 +114,26 @@ class Webhooks::InstagramEventsJob < MutexApplicationJob
   end
 
   def message(messaging, channel)
+    if messaging.dig(:message, :is_edited)
+      update_message(messaging)
+      return
+    end
+
     if channel.is_a?(Channel::Instagram)
       ::Instagram::MessageText.new(messaging, channel).perform
     else
       ::Instagram::Messenger::MessageText.new(messaging, channel).perform
     end
+  end
+
+  def update_message(messaging)
+    mid = messaging.dig(:message, :mid)
+    new_text = messaging.dig(:message, :text)
+    target_message = Message.find_by(source_id: mid)
+    return unless target_message && new_text.present?
+
+    target_message.update!(content: new_text)
+    target_message.send_update_event
   end
 
   def read(messaging, channel)

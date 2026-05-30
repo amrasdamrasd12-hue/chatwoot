@@ -51,6 +51,10 @@ module Whatsapp::IncomingMessageServiceHelpers
     message_type == 'reaction'
   end
 
+  def edit_message_type?(message_type)
+    message_type == 'edited_message'
+  end
+
   def processed_waid(waid)
     Whatsapp::PhoneNumberNormalizationService.new(inbox).normalize_and_find_contact_by_provider(waid, :cloud)
   end

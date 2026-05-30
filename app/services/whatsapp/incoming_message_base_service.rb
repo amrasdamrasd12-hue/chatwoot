@@ -27,6 +27,9 @@ class Whatsapp::IncomingMessageBaseService
     # Handle emoji reactions separately — they update an existing message rather than creating a new one
     return process_reaction if reaction_message_type?(message_type)
 
+    # Handle message edits — update existing message content instead of creating a new one
+    return process_message_edit if edit_message_type?(message_type)
+
     # We don't support ephemeral or unsupported messages, skip processing them
     return if unprocessable_message_type?(message_type)
 
@@ -86,6 +89,20 @@ class Whatsapp::IncomingMessageBaseService
     attach_files
     attach_location if message_type == 'location'
     @message.save!
+  end
+
+  def process_message_edit
+    edit_data = messages_data.first[:edited_message]
+    return unless edit_data
+
+    original_id = edit_data.dig(:context, :id)
+    new_text = edit_data.dig(:text, :body)
+
+    target_message = inbox.messages.find_by(source_id: original_id)
+    return unless target_message && new_text.present?
+
+    target_message.update!(content: new_text)
+    target_message.send_update_event
   end
 
   def process_reaction
