@@ -57,7 +57,10 @@ class Captain::SpellCheckService < Captain::BaseTaskService
     return response if response.is_a?(Hash) && response[:error]
 
     result = Captain::SpellCheckLevelFilter.apply(parse_response(response[:message].to_s), effective_strictness)
-    record_event(model_to_use, result)
+    # Log the model that actually ran — when Vertex is active, the requested
+    # gpt-* model gets overridden to Gemini, so surface the real one.
+    actual_model = Llm::Config.vertex? ? Llm::Config::VERTEX_MODEL : model_to_use
+    record_event(actual_model, result)
     result.merge(event_id: @event_id)
   end
 

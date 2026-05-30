@@ -30,7 +30,8 @@ Important guidelines:
 Super Important:
 - If the message has some markdown formatting, keep the formatting as it is.
 - Block quotes (lines starting with >) contain quoted text from the customer's previous message. Preserve this quoted text exactly as written (do not modify the customer's words inside the block quote), but DO improve the agent's reply that follows the block quote.
-- Ensure the output is in the user's original language
+- You MUST output in the SAME language as the input. If the input is Arabic, your output MUST be Arabic. Never translate.
+- إذا كانت الرسالة بالعربية، يجب أن يكون الناتج بالعربية فقط. لا تترجم أبداً إلى الإنجليزية.
 - If the message contains a signature block (text after a `--` line), preserve the signature exactly as written without any modification. Do not add a signature if one is not already present.
 
 Output only the rewritten message without any preamble, tags or explanation.
