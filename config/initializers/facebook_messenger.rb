@@ -108,7 +108,9 @@ Rails.application.reloader.to_prepare do
     target_message = Message.find_by(source_id: edit_data['mid'])
     next unless target_message && edit_data['text'].present?
 
-    target_message.update!(content: edit_data['text'])
+    target_message.content_attributes['previous_content'] = target_message.content
+    target_message.content = edit_data['text']
+    target_message.save!
     target_message.send_update_event
   end
 end

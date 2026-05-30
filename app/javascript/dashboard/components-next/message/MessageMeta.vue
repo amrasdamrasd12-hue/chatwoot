@@ -153,6 +153,12 @@ const isFromFbPageUi = computed(
 const fbPageUiLabel = '↩ رد من الصفحة';
 const fbPageUiTooltip =
   'هذا الرد أُرسل من واجهة فيسبوك/انستجرام مباشرة، وليس من Chatwoot';
+
+const isEdited = computed(() => !!contentAttributes.value?.previous_content);
+const editedLabel = '✎ تم التعديل';
+const editedTooltip = computed(
+  () => `الرسالة قبل التعديل:\n${contentAttributes.value?.previous_content}`
+);
 </script>
 
 <template>
@@ -169,6 +175,13 @@ const fbPageUiTooltip =
       class="inline-flex items-center gap-0.5 rounded-md bg-[#1877F2]/10 px-1.5 py-px text-[10px] font-semibold leading-none text-[#1877F2]"
     >
       {{ fbPageUiLabel }}
+    </span>
+    <span
+      v-if="isEdited"
+      :title="editedTooltip"
+      class="inline-flex items-center cursor-help rounded-md bg-n-slate-3 px-1.5 py-px text-[10px] font-medium leading-none text-n-slate-11"
+    >
+      {{ editedLabel }}
     </span>
     <Icon v-if="isPrivate" icon="i-lucide-lock-keyhole" class="size-3" />
     <MessageStatus v-if="showStatusIndicator" :status="statusToShow" />
