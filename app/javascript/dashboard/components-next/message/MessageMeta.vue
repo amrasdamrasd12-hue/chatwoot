@@ -158,11 +158,13 @@ const fbPageUiTooltip =
 const isEdited = computed(() => !!contentAttributes.value?.previousContent);
 const editedLabel = '✎ تم التعديل';
 const editedTooltip = computed(() => ({
-  content: `<div dir="rtl" style="text-align:right;min-width:140px;max-width:240px"><div style="font-size:10px;font-weight:700;opacity:0.55;margin-bottom:5px;letter-spacing:0.03em">الرسالة الأصلية</div><div style="font-size:12px;line-height:1.5;word-break:break-word">${escapeHtml(contentAttributes.value?.previousContent ?? '')}</div></div>`,
+  content: `<div dir="rtl" style="text-align:right;min-width:160px;max-width:260px;padding:4px 2px"><div style="font-size:10px;font-weight:600;color:#9ca3af;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">الرسالة الأصلية</div><div style="font-size:12.5px;color:#111827;line-height:1.6;word-break:break-word">${escapeHtml(contentAttributes.value?.previousContent ?? '')}</div></div>`,
   html: true,
   placement: 'top',
   triggers: ['click'],
+  theme: 'dropdown',
   autoHide: true,
+  distance: 8,
 }));
 
 const showReadLabel = computed(
@@ -188,7 +190,7 @@ const showReadLabel = computed(
     <span
       v-if="isEdited"
       v-tooltip="editedTooltip"
-      class="inline-flex items-center cursor-pointer select-none rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-2 py-px text-[10px] font-bold leading-none text-white shadow-sm shadow-fuchsia-300/60 transition-all duration-150 hover:from-violet-600 hover:to-fuchsia-600 hover:shadow-fuchsia-400/70 active:scale-95"
+      class="inline-flex items-center cursor-pointer select-none rounded-full bg-teal-500 px-2 py-0.5 text-[10px] font-semibold leading-none text-white transition-all duration-150 hover:bg-teal-600 active:scale-95"
     >
       {{ editedLabel }}
     </span>
