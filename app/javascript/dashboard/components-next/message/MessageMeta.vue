@@ -9,6 +9,7 @@ import { useMessageContext } from './provider.js';
 import { useI18n } from 'vue-i18n';
 
 import { MESSAGE_STATUS, MESSAGE_TYPES, SENDER_TYPES } from './constants';
+import { escapeHtml } from 'shared/helpers/HTMLSanitizer';
 
 const {
   isAFacebookInbox,
@@ -157,7 +158,7 @@ const fbPageUiTooltip =
 const isEdited = computed(() => !!contentAttributes.value?.previousContent);
 const editedLabel = '✎ تم التعديل';
 const editedTooltip = computed(() => ({
-  content: `<div dir="rtl" class="text-right"><div class="text-[10px] font-semibold opacity-60 mb-1">الرسالة قبل التعديل</div><div>${contentAttributes.value?.previousContent}</div></div>`,
+  content: `<div dir="rtl" class="text-right"><div class="text-[10px] font-semibold opacity-60 mb-1">الرسالة قبل التعديل</div><div>${escapeHtml(contentAttributes.value?.previousContent ?? '')}</div></div>`,
   html: true,
   placement: 'top',
 }));
