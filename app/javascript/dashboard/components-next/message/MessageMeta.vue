@@ -154,10 +154,10 @@ const fbPageUiLabel = '↩ رد من الصفحة';
 const fbPageUiTooltip =
   'هذا الرد أُرسل من واجهة فيسبوك/انستجرام مباشرة، وليس من Chatwoot';
 
-const isEdited = computed(() => !!contentAttributes.value?.previous_content);
+const isEdited = computed(() => !!contentAttributes.value?.previousContent);
 const editedLabel = '✎ تم التعديل';
 const editedTooltip = computed(
-  () => `الرسالة قبل التعديل:\n${contentAttributes.value?.previous_content}`
+  () => `الرسالة قبل التعديل:\n${contentAttributes.value?.previousContent}`
 );
 
 const showReadLabel = computed(
