@@ -49,6 +49,7 @@ const L = {
   LEGEND_SENT: 'أرسل الأصلي',
   LEGEND_EDITED: 'رجع للتعديل',
   TIMES: 'مرة',
+  TZ_NOTE: 'بتوقيت القاهرة',
 };
 
 // Stable category keys ←→ Arabic label + chip colours. Full literal
@@ -156,6 +157,11 @@ const rangeIso = computed(() => {
     since: isoDate(new Date(now - preset.days * 86400000)),
     until: isoDate(now),
   };
+});
+
+const rangeLabel = computed(() => {
+  const r = rangeIso.value;
+  return r.since === r.until ? r.since : `${r.since} — ${r.until}`;
 });
 
 const fetchReport = async () => {
@@ -303,67 +309,114 @@ const exportCsv = () => {
 <template>
   <div class="flex flex-col gap-6 p-6">
     <!-- Header -->
-    <header class="flex items-start justify-between gap-4">
-      <div>
-        <h1 class="text-[18px] font-semibold tracking-tight text-n-slate-12">
-          {{ L.TITLE }}
-        </h1>
-        <p class="mt-1 text-[13px] text-n-slate-11">
-          {{ L.SUBTITLE }}
-        </p>
+    <header class="flex flex-wrap items-start justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <span
+          class="grid size-10 place-items-center rounded-xl bg-n-brand/15 text-n-brand"
+        >
+          <span class="i-lucide-spell-check size-5" />
+        </span>
+        <div>
+          <h1 class="text-[18px] font-semibold tracking-tight text-n-slate-12">
+            {{ L.TITLE }}
+          </h1>
+          <p class="mt-0.5 text-[12.5px] text-n-slate-11 flex-wrap">
+            {{ L.SUBTITLE }}
+          </p>
+        </div>
       </div>
       <button
         v-if="byAgent.length"
         type="button"
-        class="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-n-weak bg-n-solid-1 px-3 text-[12.5px] font-medium text-n-slate-12 transition-colors hover:bg-n-alpha-2"
+        class="inline-flex shrink-0 items-center gap-2 rounded-lg border border-n-weak bg-n-solid-1 px-3 py-2 text-[12.5px] font-medium text-n-slate-12 shadow-sm transition-colors hover:bg-n-alpha-2"
         @click="exportCsv"
       >
-        <span class="i-lucide-download size-4" aria-hidden="true" />
+        <span
+          class="i-lucide-download size-4 text-n-slate-11"
+          aria-hidden="true"
+        />
         {{ L.EXPORT }}
       </button>
     </header>
 
-    <!-- Filters -->
+    <!-- Filter bar -->
     <div
-      class="flex flex-wrap items-center gap-3 rounded-xl border border-n-weak bg-n-solid-1 p-3"
+      class="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl border border-n-weak bg-n-solid-1 p-2.5 shadow-sm"
     >
-      <div class="flex flex-wrap gap-1">
+      <!-- preset pills -->
+      <div class="flex items-center gap-1 rounded-xl bg-n-alpha-1 p-1">
         <button
           v-for="p in PRESETS"
           :key="p.key"
           type="button"
-          class="rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors"
+          class="rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition-all"
           :class="
             !isCustom && activePreset === p.key
-              ? 'bg-n-brand text-white'
-              : 'text-n-slate-11 hover:bg-n-alpha-2'
+              ? 'bg-n-brand text-white shadow-sm'
+              : 'text-n-slate-11 hover:bg-n-alpha-2 hover:text-n-slate-12'
           "
           @click="pickPreset(p.key)"
         >
           {{ p.label }}
         </button>
       </div>
+
       <div class="h-6 w-px bg-n-weak" />
-      <div class="flex items-center gap-2 text-[12px]">
-        <span class="text-n-slate-11">{{ L.FROM }}</span>
-        <input
-          v-model="customFrom"
-          type="date"
-          class="rounded-md border border-n-weak bg-n-solid-1 px-2 py-1 text-n-slate-12"
-        />
-        <span class="text-n-slate-11">{{ L.TO }}</span>
-        <input
-          v-model="customTo"
-          type="date"
-          class="rounded-md border border-n-weak bg-n-solid-1 px-2 py-1 text-n-slate-12"
-        />
+
+      <!-- custom range -->
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-[12px] text-n-slate-10">{{ L.FROM }}</span>
+        <label
+          class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 transition-colors focus-within:border-n-brand"
+          :class="
+            isCustom
+              ? 'border-n-slate-5 bg-n-solid-1'
+              : 'border-n-weak bg-n-alpha-1'
+          "
+        >
+          <span class="i-lucide-calendar size-3.5 text-n-slate-10" />
+          <input
+            v-model="customFrom"
+            type="date"
+            dir="ltr"
+            class="w-[112px] bg-transparent text-[12.5px] tabular-nums text-n-slate-12 outline-none"
+          />
+        </label>
+        <span class="text-[12px] text-n-slate-10">{{ L.TO }}</span>
+        <label
+          class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 transition-colors focus-within:border-n-brand"
+          :class="
+            isCustom
+              ? 'border-n-slate-5 bg-n-solid-1'
+              : 'border-n-weak bg-n-alpha-1'
+          "
+        >
+          <span class="i-lucide-calendar size-3.5 text-n-slate-10" />
+          <input
+            v-model="customTo"
+            type="date"
+            dir="ltr"
+            class="w-[112px] bg-transparent text-[12.5px] tabular-nums text-n-slate-12 outline-none"
+          />
+        </label>
         <button
           type="button"
-          class="rounded-md bg-n-alpha-2 px-3 py-1.5 text-[12.5px] font-medium text-n-slate-12 hover:bg-n-alpha-3"
+          class="inline-flex items-center gap-1.5 rounded-lg bg-n-brand px-3 py-1.5 text-[12.5px] font-medium text-white shadow-sm transition-opacity hover:opacity-90"
           @click="applyCustom"
         >
+          <span class="i-lucide-check size-3.5" />
           {{ L.APPLY }}
         </button>
+      </div>
+
+      <!-- active range chip -->
+      <div
+        class="ms-auto inline-flex items-center gap-1.5 rounded-lg bg-n-alpha-1 px-2.5 py-1.5 text-[12px] tabular-nums text-n-slate-11"
+      >
+        <span class="i-lucide-clock-3 size-3.5 text-n-slate-10" />
+        <span dir="ltr">{{ rangeLabel }}</span>
+        <span class="size-1 rounded-full bg-n-slate-8" />
+        <span>{{ L.TZ_NOTE }}</span>
       </div>
     </div>
 
