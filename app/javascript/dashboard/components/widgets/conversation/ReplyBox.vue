@@ -548,22 +548,23 @@ export default {
       true
     );
 
-    // Eltafouk: pre-fetch the spell check 250 ms after the agent stops
+    // Eltafouk: pre-fetch the spell check 1 s after the agent stops
     // typing. Result lands in `spellCheckCache` keyed by trimmed body so
-    // `confirmOnSendReply` can read it instantly. Skip private notes and
-    // very short drafts (a <3-char message is almost always intentional
-    // and not worth the LLM round-trip). 250 ms is tight enough to catch
-    // an agent who barely pauses before clicking send, but long enough to
-    // avoid firing for every keystroke in a normal typing burst.
+    // `confirmOnSendReply` can read it instantly. The 1 s idle (vs a tight
+    // 250 ms) is the main cost lever: a message typed in 3 bursts no longer
+    // fires 3 calls for throwaway intermediate drafts — it waits for a real
+    // pause and fires once. Skip private notes, very short drafts, and
+    // anything with no Arabic letters (emoji / numbers / links).
     this.debouncedSpellCheckPrefetch = debounce(() => {
       if (this.isPrivate) return;
       if (this.spellCheckSettingsStore?.isDmEnabled === false) return;
       const trimmed = (this.message || '').trim();
       if (trimmed.length < 3) return;
+      if (!/\p{Script=Arabic}/u.test(trimmed)) return;
       if (this.spellCheckCache.has(trimmed)) return;
       if (this.spellCheckInFlight?.trimmed === trimmed) return;
       this.runBackgroundSpellCheck(trimmed);
-    }, 250);
+    }, 1000);
 
     // Lazy-load the settings store once per session so toggle decisions
     // can resolve synchronously from cache afterwards.

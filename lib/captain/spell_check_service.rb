@@ -46,6 +46,9 @@ class Captain::SpellCheckService < Captain::BaseTaskService
   def perform
     stripped = content.to_s.strip
     return empty_result if stripped.empty?
+    # Nothing to spell-check if there are no Arabic letters at all (pure
+    # emoji / numbers / links / punctuation) — skip the LLM call entirely.
+    return empty_result unless stripped.match?(/\p{Arabic}/)
 
     model_to_use = pick_model(stripped)
     return empty_result if model_to_use.nil?  # strategy: skip
