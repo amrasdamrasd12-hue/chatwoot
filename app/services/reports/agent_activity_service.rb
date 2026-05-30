@@ -18,7 +18,9 @@ class Reports::AgentActivityService # rubocop:disable Metrics/ClassLength
   # comment replies carry no author. Surfaced in meta so the UI can warn
   # when the selected range reaches further back.
   COMMENT_ATTRIBUTION_SINCE = Date.new(2026, 5, 27)
-  SYSTEM_EMAILS = %w[admin@eltafouk.com page-relay@eltafouk.local].freeze
+  # Only the FB relay is a true non-human account; the admin (Amr Ashraf)
+  # replies for real, so he's counted as a regular agent.
+  SYSTEM_EMAILS = %w[page-relay@eltafouk.local].freeze
 
   CHANNEL_LABELS = {
     'Channel::FacebookPage' => 'facebook',

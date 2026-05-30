@@ -427,17 +427,19 @@ const exportCsv = () => {
           <div
             v-for="(count, hour) in byHour"
             :key="hour"
-            class="flex flex-1 flex-col items-center justify-end gap-1"
+            class="min-h-px flex-1 rounded-t bg-n-brand/80"
+            :style="{ height: `${maxHour ? (100 * count) / maxHour : 0}%` }"
             :title="`${hour}${L.HOUR_SUFFIX} — ${count}`"
+          />
+        </div>
+        <div class="mt-1 flex gap-1">
+          <span
+            v-for="(count, hour) in byHour"
+            :key="hour"
+            class="flex-1 text-center text-[9px] tabular-nums text-n-slate-10"
           >
-            <div
-              class="w-full rounded-t bg-n-brand/80"
-              :style="{ height: `${(100 * count) / maxHour}%` }"
-            />
-            <span class="text-[9px] tabular-nums text-n-slate-10">{{
-              hour
-            }}</span>
-          </div>
+            {{ hour }}
+          </span>
         </div>
       </div>
 
@@ -485,20 +487,19 @@ const exportCsv = () => {
             <div
               v-for="d in byDay"
               :key="d.date"
-              class="flex flex-1 flex-col items-center justify-end gap-1"
+              class="min-h-px flex-1 rounded-t bg-n-teal-9"
+              :style="{ height: `${maxDay ? (100 * d.total) / maxDay : 0}%` }"
               :title="`${d.date} — ${d.total}`"
+            />
+          </div>
+          <div class="mt-1 flex gap-2">
+            <span
+              v-for="d in byDay"
+              :key="d.date"
+              class="flex-1 text-center text-[9px] tabular-nums text-n-slate-10"
             >
-              <span class="text-[10px] tabular-nums text-n-slate-11">{{
-                d.total
-              }}</span>
-              <div
-                class="w-full rounded-t bg-n-teal-9"
-                :style="{ height: `${(100 * d.total) / maxDay}%` }"
-              />
-              <span class="text-[9px] tabular-nums text-n-slate-10">{{
-                d.date.slice(5)
-              }}</span>
-            </div>
+              {{ d.date.slice(5) }}
+            </span>
           </div>
         </div>
       </div>
