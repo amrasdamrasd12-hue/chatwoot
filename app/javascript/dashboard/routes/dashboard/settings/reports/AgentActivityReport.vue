@@ -113,7 +113,12 @@ const report = ref(null);
 const loading = ref(false);
 const error = ref(null);
 
-const isoDate = d => d.toISOString().slice(0, 10);
+const isoDate = d => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 const rangeIso = computed(() => {
   const now = new Date();
