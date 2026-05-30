@@ -33,11 +33,19 @@ const getConversationById = _state => conversationId => {
 export const mutations = {
   [types.SET_ALL_CONVERSATION](_state, conversationList) {
     const newAllConversations = [..._state.allConversations];
+    // Eltafouk: the original code did `newAllConversations.findIndex(...)`
+    // inside the forEach, making the merge O(N×M). For a 505-row unread
+    // response that's ~10k inner iterations every commit — visible Vue
+    // stall during the click. Build the id→index map once and look up
+    // in O(1) per incoming conversation.
+    const indexById = new Map();
+    newAllConversations.forEach((c, i) => indexById.set(c.id, i));
     conversationList.forEach(conversation => {
-      const indexInCurrentList = newAllConversations.findIndex(
-        c => c.id === conversation.id
-      );
+      const indexInCurrentList = indexById.has(conversation.id)
+        ? indexById.get(conversation.id)
+        : -1;
       if (indexInCurrentList < 0) {
+        indexById.set(conversation.id, newAllConversations.length);
         newAllConversations.push(conversation);
       } else if (conversation.id !== _state.selectedChatId) {
         // If the conversation is already in the list, replace it
