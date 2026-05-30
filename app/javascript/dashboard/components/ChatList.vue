@@ -491,26 +491,33 @@ function emitConversationLoaded() {
   // });
 }
 
-function fetchFilteredConversations(payload) {
+function fetchFilteredConversations(payload, extra = {}) {
   payload = useSnakeCase(payload);
   let page = currentFiltersPage.value + 1;
-  store
-    .dispatch('fetchFilteredConversations', {
-      queryData: filterQueryGenerator(payload),
-      page,
-    })
-    .then(emitConversationLoaded);
+  const dispatched = store.dispatch('fetchFilteredConversations', {
+    queryData: filterQueryGenerator(payload),
+    page,
+    // Eltafouk: when the "غير مقروء" pill is on, the watcher passes
+    // perPage:1000 + conversationType:'unread' so the filter endpoint
+    // returns the whole unread set in one shot (same behaviour as the
+    // index endpoint). Unset on regular filter use → backend default.
+    perPage: extra.perPage,
+    conversationType: extra.conversationType,
+  });
 
   showAdvancedFilters.value = false;
+  return dispatched.then(emitConversationLoaded);
 }
 
-function fetchSavedFilteredConversations(payload) {
+function fetchSavedFilteredConversations(payload, extra = {}) {
   payload = useSnakeCase(payload);
   let page = currentFiltersPage.value + 1;
-  store
+  return store
     .dispatch('fetchFilteredConversations', {
       queryData: payload,
       page,
+      perPage: extra.perPage,
+      conversationType: extra.conversationType,
     })
     .then(emitConversationLoaded);
 }
@@ -1051,15 +1058,29 @@ watch(showUnreadOnly, async newVal => {
   store.dispatch('emptyAllConversations');
   store.dispatch('clearConversationFilters');
 
-  if (hasActiveFolders.value) {
-    const payload = activeFolder.value.query;
-    fetchSavedFilteredConversations(payload);
-    return;
-  }
-  if (props.foldersId) return;
+  // Eltafouk: `emptyAllConversations` clears the store synchronously,
+  // but `chatsOnView` is driven by a `watch(chatLists, …)` that flushes
+  // on the next tick — without this await, the loop's `lenBefore`
+  // would still reflect the residual list (~25 rows from the initial
+  // folder load), making `added = N - 25 < perPage` trigger the
+  // tail-detect short-circuit one page too early and clip ~25 unread
+  // rows off the displayed total.
+  await nextTick();
+
+  // Eltafouk: pick the right fetch path for the current view. Folder /
+  // custom-view routes (e.g. "جميع قنوات التعليقات", saved filters)
+  // go through `POST /conversations/filter` with the saved query +
+  // `conversation_type=unread` overlay; ad-hoc applied filters do the
+  // same but with the user's filter payload; the plain conversation
+  // list uses `GET /conversations` via `fetchAllConversations`. All
+  // three honour `per_page=1000` server-side (capped) so the unread
+  // set lands in one round-trip and the IntersectionObserver doesn't
+  // dribble in 25-at-a-time.
+  const requestedPerPage = 1000;
+  const folderQuery = hasActiveFolders.value ? activeFolder.value.query : null;
+  const isFilterPath = Boolean(folderQuery) || hasAppliedFilters.value;
 
   let safety = 50;
-  const requestedPerPage = 1000;
   let pageIdx = 0;
   while (
     safety > 0 &&
@@ -1072,8 +1093,22 @@ watch(showUnreadOnly, async newVal => {
     store.dispatch('updateChatListFilters', conversationFilters.value);
     const fetchT0 = performance.now();
     perfMark(`page${pageIdx}:fetch:before`);
-    // eslint-disable-next-line no-await-in-loop
-    await store.dispatch('fetchAllConversations');
+    if (folderQuery) {
+      // eslint-disable-next-line no-await-in-loop
+      await fetchSavedFilteredConversations(folderQuery, {
+        perPage: requestedPerPage,
+        conversationType: 'unread',
+      });
+    } else if (hasAppliedFilters.value) {
+      // eslint-disable-next-line no-await-in-loop
+      await fetchFilteredConversations(appliedFilters.value, {
+        perPage: requestedPerPage,
+        conversationType: 'unread',
+      });
+    } else {
+      // eslint-disable-next-line no-await-in-loop
+      await store.dispatch('fetchAllConversations');
+    }
     perfMark(
       `page${pageIdx}:fetch:after`,
       `(fetch ${(performance.now() - fetchT0).toFixed(0)}ms, rows=${chatsOnView.value.length})`
@@ -1089,7 +1124,11 @@ watch(showUnreadOnly, async newVal => {
     // page is empty, so a probe request to confirm "no more rows" costs
     // as much as a real data fetch (~6s on the prod-sized schema).
     // Detect the tail of the unread set straight from the response size:
-    // a page that didn't fill `per_page=1000` is the last one.
+    // a page that didn't fill `per_page=1000` is the last one. On the
+    // filter path `chatsOnView` is fed by `chatLists.value` (which the
+    // server replaces wholesale on each page), so `added` is the new
+    // rows that arrived this iteration — same semantics as the index
+    // path's append-only behaviour for tail-detection purposes.
     if (added < requestedPerPage) {
       // CRITICAL: tell the pagination store we hit the tail, otherwise the
       // virtual scroller's IntersectionObserver fires loadMoreConversations()
@@ -1106,7 +1145,7 @@ watch(showUnreadOnly, async newVal => {
   emitConversationLoaded();
   perfMark(
     'watcher:done',
-    `(pages=${pageIdx}, chatsOnView=${chatsOnView.value.length})`
+    `(pages=${pageIdx}, chatsOnView=${chatsOnView.value.length}, path=${isFilterPath ? 'filter' : 'index'})`
   );
 });
 
