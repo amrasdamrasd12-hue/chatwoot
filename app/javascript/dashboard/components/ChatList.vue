@@ -1073,12 +1073,21 @@ watch(showUnreadOnly, async newVal => {
   // `conversation_type=unread` overlay; ad-hoc applied filters do the
   // same but with the user's filter payload; the plain conversation
   // list uses `GET /conversations` via `fetchAllConversations`. All
-  // three honour `per_page=1000` server-side (capped) so the unread
-  // set lands in one round-trip and the IntersectionObserver doesn't
-  // dribble in 25-at-a-time.
-  const requestedPerPage = 1000;
+  // three honour `per_page` server-side (capped at 1000).
+  //
+  // Eltafouk: the comments folder ("جميع قنوات التعليقات") trips on
+  // the jbuilder partial cost — 619 unread rows × the slim partial
+  // costs ~1.5s of Views time, plus the Egypt→edge round-trip on a
+  // single 2.7 MB response. Asking for smaller pages sequentially
+  // makes the FIRST batch land in ~700-900 ms instead of 3+ seconds:
+  // the user sees real rows immediately and the rest stream in behind
+  // while they're reading the top of the list. The plain index path
+  // (`fetchAllConversations`) stays on 1000 — its rows-per-second is
+  // ~3x faster (lighter partial, no permission-filter overhead) so
+  // chunking buys nothing there.
   const folderQuery = hasActiveFolders.value ? activeFolder.value.query : null;
   const isFilterPath = Boolean(folderQuery) || hasAppliedFilters.value;
+  const requestedPerPage = isFilterPath ? 250 : 1000;
 
   let safety = 50;
   let pageIdx = 0;
