@@ -69,19 +69,7 @@ class Account < ApplicationRecord
           },
           'additionalProperties': false
         },
-        'spell_check_settings': {
-          'type': %w[object null],
-          'properties': {
-            'dm_enabled': { 'type': %w[boolean null] },
-            'comments_enabled': { 'type': %w[boolean null] },
-            'strictness': { 'type': %w[integer null], 'minimum': 1, 'maximum': 6 },
-            'long_message_strategy': {
-              'type': %w[string null],
-              'enum': %w[skip nano mini hybrid]
-            }
-          },
-          'additionalProperties': false
-        }
+        'spell_check_settings': SpellCheckSettingsSchema::FRAGMENT
       },
     'required': [],
     'additionalProperties': true
@@ -123,6 +111,7 @@ class Account < ApplicationRecord
   has_many :custom_filters, dependent: :destroy_async
   # Eltafouk: spell-check audit log
   has_many :spell_check_events, dependent: :destroy_async
+  has_many :spell_check_fixes, dependent: :destroy_async
   has_many :dashboard_apps, dependent: :destroy_async
   has_many :data_imports, dependent: :destroy_async
   has_many :email_channels, dependent: :destroy_async, class_name: '::Channel::Email'

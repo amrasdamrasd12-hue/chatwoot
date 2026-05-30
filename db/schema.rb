@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_05_29_100000) do
+ActiveRecord::Schema[7.1].define(version: 2026_05_30_120000) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -1197,6 +1197,40 @@ ActiveRecord::Schema[7.1].define(version: 2026_05_29_100000) do
     t.string "description"
     t.float "resolution_time_threshold"
     t.index ["account_id"], name: "index_sla_policies_on_account_id"
+  end
+
+  create_table "spell_check_events", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "user_id"
+    t.bigint "conversation_id"
+    t.bigint "inbox_id"
+    t.string "surface", default: "dm"
+    t.integer "strictness", default: 3
+    t.string "model_used"
+    t.boolean "has_errors", default: false, null: false
+    t.integer "errors_count", default: 0
+    t.integer "original_length", default: 0
+    t.integer "corrected_length", default: 0
+    t.string "decision", default: "pending", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "created_at"], name: "index_spell_check_events_on_account_id_and_created_at"
+    t.index ["account_id", "decision"], name: "index_spell_check_events_on_account_id_and_decision"
+    t.index ["account_id", "user_id", "created_at"], name: "idx_spell_check_events_acct_user_time"
+  end
+
+  create_table "spell_check_fixes", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "spell_check_event_id", null: false
+    t.bigint "user_id"
+    t.string "wrong", null: false
+    t.string "right", null: false
+    t.string "why"
+    t.string "category", default: "other", null: false
+    t.datetime "created_at", null: false
+    t.index ["account_id", "category"], name: "index_spell_check_fixes_on_account_id_and_category"
+    t.index ["account_id", "user_id", "created_at"], name: "idx_spell_check_fixes_acct_user_time"
+    t.index ["spell_check_event_id"], name: "index_spell_check_fixes_on_spell_check_event_id"
   end
 
   create_table "taggings", id: :serial, force: :cascade do |t|

@@ -12,30 +12,102 @@ const store = useStore();
 const L = {
   TITLE: 'تقرير المدقق الإملائي',
   SUBTITLE:
-    'تتبّع الأخطاء الإملائية لكل موظف، ومين بيستخدم التصحيح ومين بيرسل النص الأصلي.',
+    'مرجعية تقييم الموظفين إملائياً: معدّل الأخطاء، أنواعها، وأكتر الكلمات اللي بيغلطوا فيها.',
   FROM: 'من',
   TO: 'إلى',
   APPLY: 'تطبيق',
+  EXPORT: 'تصدير CSV',
   LOADING: 'جاري التحميل…',
   EMPTY: 'مفيش بيانات في النطاق المختار.',
-  ERROR_FALLBACK: 'فشل التحميل',
   TOTAL_CHECKS: 'إجمالي الفحوصات',
+  TOTAL_FIXES: 'إجمالي الأخطاء',
   CORRECTED: 'تصحيحات مقبولة',
   SENT_ORIGINAL: 'أُرسل النص الأصلي',
   EDITED: 'رجع للتعديل',
   COMPARE: 'مقارنة الموظفين',
-  COMPARE_HINT:
-    'مرتّبين بعدد الفحوصات. النسبة بتعرض إيه نسبة كل قرار من إجمالي الفحوصات اللي ظهر فيها modal.',
+  COMPARE_HINT: 'اضغط على أي موظف لعرض أنواع أخطائه وأكتر الكلمات تكراراً.',
   COL_AGENT: 'الموظف',
-  COL_TOTAL: 'إجمالي',
-  COL_ERRORS: 'أخطاء وقعت فيها',
+  COL_TOTAL: 'فحوصات',
+  COL_ERR_RATE: 'معدّل الخطأ',
+  COL_ERRORS: 'أخطاء',
   COL_BEHAVIOR: 'سلوكه',
-  COL_RATE: 'معدّل قبول التصحيح',
-  NO_AGENT: 'بدون موظف',
+  COL_RATE: 'قبول التصحيح',
+  CATEGORIES_TITLE: 'تصنيف الأخطاء (الكل)',
+  CATEGORIES_HINT: 'توزيع كل الأخطاء المكتشفة على الأنواع في النطاق المختار.',
+  AGENT_CATEGORIES: 'أنواع أخطاء الموظف',
+  AGENT_TOP: 'أكتر الكلمات غلطاً',
+  TOP_TITLE: 'أكتر الأخطاء تكراراً (كل الموظفين)',
+  TOP_HINT: 'نقاط الضعف المشتركة اللي تستاهل تنبيه للفريق كله.',
+  TREND_TITLE: 'النشاط اليومي',
+  FAIR_TITLE: 'انتبه للعدل في المقارنة',
+  FAIR_LEVELS: 'البيانات دي بتشمل مستويات تدقيق مختلفة',
+  FAIR_HINT:
+    'الموظف على مستوى أعلى بتظهر عليه أخطاء أكتر تلقائياً. للمقارنة العادلة وحّد المستوى من إعدادات المدقق.',
+  MODELS: 'الموديلات',
+  NO_MISTAKES: 'مفيش أخطاء متسجّلة لهذا الموظف.',
   LEGEND_CORRECTED: 'قبل التصحيح',
   LEGEND_SENT: 'أرسل الأصلي',
   LEGEND_EDITED: 'رجع للتعديل',
+  TIMES: 'مرة',
 };
+
+// Stable category keys ←→ Arabic label + chip colours. Full literal
+// class strings so Tailwind's JIT scanner picks them up.
+const CATEGORY_META = {
+  hamza: {
+    label: 'همزة',
+    chip: 'bg-n-iris-3 text-n-iris-11',
+    dot: 'bg-n-iris-9',
+  },
+  tanween: {
+    label: 'تنوين',
+    chip: 'bg-n-amber-3 text-n-amber-11',
+    dot: 'bg-n-amber-9',
+  },
+  taa: {
+    label: 'تاء/هاء',
+    chip: 'bg-n-teal-3 text-n-teal-11',
+    dot: 'bg-n-teal-9',
+  },
+  ya: {
+    label: 'ياء/ألف مقصورة',
+    chip: 'bg-n-blue-3 text-n-blue-11',
+    dot: 'bg-n-blue-9',
+  },
+  letter_missing: {
+    label: 'حرف ناقص',
+    chip: 'bg-n-ruby-3 text-n-ruby-11',
+    dot: 'bg-n-ruby-9',
+  },
+  letter_extra: {
+    label: 'حرف زائد',
+    chip: 'bg-n-ruby-3 text-n-ruby-11',
+    dot: 'bg-n-ruby-9',
+  },
+  letter_wrong: {
+    label: 'حرف غلط',
+    chip: 'bg-n-ruby-3 text-n-ruby-11',
+    dot: 'bg-n-ruby-9',
+  },
+  diacritic: {
+    label: 'تشكيل',
+    chip: 'bg-n-slate-3 text-n-slate-11',
+    dot: 'bg-n-slate-9',
+  },
+  punctuation: {
+    label: 'ترقيم/تطويل',
+    chip: 'bg-n-slate-3 text-n-slate-11',
+    dot: 'bg-n-slate-9',
+  },
+  other: {
+    label: 'أخرى',
+    chip: 'bg-n-slate-3 text-n-slate-11',
+    dot: 'bg-n-slate-9',
+  },
+};
+const categoryLabel = c => CATEGORY_META[c]?.label || c;
+const categoryChip = c => CATEGORY_META[c]?.chip || CATEGORY_META.other.chip;
+const categoryDot = c => CATEGORY_META[c]?.dot || CATEGORY_META.other.dot;
 
 const PRESETS = [
   { key: 'today', days: 0, label: 'اليوم' },
@@ -53,6 +125,7 @@ const isCustom = ref(false);
 const report = ref(null);
 const loading = ref(false);
 const error = ref(null);
+const expanded = ref(new Set());
 
 const allAgents = computed(() => store.getters['agents/getAgents'] || []);
 
@@ -83,6 +156,7 @@ const rangeIso = computed(() => {
 const fetchReport = async () => {
   loading.value = true;
   error.value = null;
+  expanded.value = new Set();
   try {
     const { data } = await SpellCheckReportsAPI.fetch(rangeIso.value);
     report.value = data;
@@ -106,25 +180,62 @@ watch(activePreset, () => {
 
 const summary = computed(() => report.value?.summary || null);
 const byAgent = computed(() => report.value?.by_agent || []);
+const topMistakes = computed(() => report.value?.top_mistakes || []);
+const segments = computed(() => report.value?.meta?.segments || null);
+const byDay = computed(() => report.value?.by_day || []);
 
-const correctedRate = a => {
-  if (!a.total) return 0;
-  return Math.round((100 * (a.decisions.corrected || 0)) / a.total);
-};
-const sentOriginalRate = a => {
-  if (!a.total) return 0;
-  return Math.round((100 * (a.decisions.sent_original || 0)) / a.total);
-};
-const editedRate = a => {
-  if (!a.total) return 0;
-  return Math.round((100 * (a.decisions.edited || 0)) / a.total);
-};
+// Global category breakdown, biggest first, zeros dropped.
+const globalCategories = computed(() => {
+  const obj = summary.value?.by_category || {};
+  return Object.entries(obj)
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1]);
+});
+const totalFixes = computed(() => summary.value?.total_fixes || 0);
 
-// Find the busiest agent's total so we can scale the bar widths in the
-// comparison chart without recomputing on every render.
+// Fairness: how many distinct strictness levels the data spans. More
+// than one → cross-agent comparison is on different rulers.
+const strictnessLevels = computed(() =>
+  Object.keys(segments.value?.by_strictness || {}).sort()
+);
+const modelsUsed = computed(() =>
+  Object.keys(segments.value?.by_model || {}).filter(m => m && m !== 'unknown')
+);
+const mixedLevels = computed(() => strictnessLevels.value.length > 1);
+
+const correctedRate = a =>
+  a.total ? Math.round((100 * (a.decisions.corrected || 0)) / a.total) : 0;
+const sentOriginalRate = a =>
+  a.total ? Math.round((100 * (a.decisions.sent_original || 0)) / a.total) : 0;
+const editedRate = a =>
+  a.total ? Math.round((100 * (a.decisions.edited || 0)) / a.total) : 0;
+// Share of this agent's checks where the model found at least one error.
+const errorRate = a =>
+  a.total
+    ? Math.round(
+        (100 * (a.total - (a.decisions.no_errors_send || 0))) / a.total
+      )
+    : 0;
+
+const agentCategories = a =>
+  Object.entries(a.categories || {})
+    .filter(([, n]) => n > 0)
+    .sort((x, y) => y[1] - x[1]);
+
 const maxAgentTotal = computed(() =>
   byAgent.value.reduce((m, a) => Math.max(m, a.total), 1)
 );
+
+function dayTotal(d) {
+  return Object.entries(d).reduce(
+    (s, [k, v]) => (k === 'date' ? s : s + (Number(v) || 0)),
+    0
+  );
+}
+const maxDayTotal = computed(() =>
+  byDay.value.reduce((m, d) => Math.max(m, dayTotal(d)), 1)
+);
+const dayLabel = iso => (iso || '').slice(5); // MM-DD
 
 const pickPreset = key => {
   activePreset.value = key;
@@ -133,6 +244,54 @@ const pickPreset = key => {
 const applyCustom = () => {
   isCustom.value = true;
   fetchReport();
+};
+
+const agentKey = a => a.user_id || 'na';
+const isExpanded = a => expanded.value.has(agentKey(a));
+const toggleAgent = a => {
+  const key = agentKey(a);
+  const next = new Set(expanded.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  expanded.value = next;
+};
+
+const csvCell = v => {
+  const s = String(v ?? '');
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const exportCsv = () => {
+  const header = [
+    L.COL_AGENT,
+    'البريد',
+    L.TOTAL_CHECKS,
+    L.COL_ERRORS,
+    'معدل الخطأ %',
+    'قبول التصحيح %',
+    'أرسل الأصلي %',
+    'رجع للتعديل %',
+  ];
+  const lines = byAgent.value.map(a => [
+    a.name,
+    a.email || '',
+    a.total,
+    a.errors_caught,
+    errorRate(a),
+    correctedRate(a),
+    sentOriginalRate(a),
+    editedRate(a),
+  ]);
+  const csv = [header, ...lines].map(r => r.map(csvCell).join(',')).join('\n');
+  // Lead with a UTF-8 BOM so Excel opens Arabic columns correctly.
+  const blob = new Blob(['\uFEFF', csv], {
+    type: 'text/csv;charset=utf-8',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `spell-check-report-${rangeIso.value.since}_${rangeIso.value.until}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
 };
 </script>
 
@@ -148,6 +307,15 @@ const applyCustom = () => {
           {{ L.SUBTITLE }}
         </p>
       </div>
+      <button
+        v-if="byAgent.length"
+        type="button"
+        class="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-n-weak bg-n-solid-1 px-3 text-[12.5px] font-medium text-n-slate-12 transition-colors hover:bg-n-alpha-2"
+        @click="exportCsv"
+      >
+        <span class="i-lucide-download size-4" aria-hidden="true" />
+        {{ L.EXPORT }}
+      </button>
     </header>
 
     <!-- Filters -->
@@ -209,6 +377,28 @@ const applyCustom = () => {
     </div>
 
     <template v-else-if="summary">
+      <!-- Fairness banner — only when the data mixes strictness levels -->
+      <div
+        v-if="mixedLevels"
+        class="flex items-start gap-3 rounded-xl bg-n-amber-2 px-4 py-3 ring-1 ring-n-amber-6"
+      >
+        <span
+          class="i-lucide-scale mt-0.5 size-4 shrink-0 text-n-amber-11"
+          aria-hidden="true"
+        />
+        <div class="text-[12.5px] leading-relaxed text-n-amber-12">
+          <p class="font-semibold">{{ L.FAIR_TITLE }}</p>
+          <p class="mt-0.5">
+            {{ L.FAIR_LEVELS }}:
+            <span class="font-bold">{{ strictnessLevels.join('، ') }}</span> —
+            {{ L.FAIR_HINT }}
+          </p>
+          <p v-if="modelsUsed.length" class="mt-0.5 text-n-amber-11">
+            {{ L.MODELS }}: {{ modelsUsed.join('، ') }}
+          </p>
+        </div>
+      </div>
+
       <!-- Summary KPI tiles -->
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div class="rounded-xl border border-n-weak bg-n-solid-1 p-4">
@@ -224,6 +414,18 @@ const applyCustom = () => {
           </p>
         </div>
         <div
+          class="rounded-xl border border-n-weak bg-n-ruby-2 p-4 ring-1 ring-n-ruby-6"
+        >
+          <p
+            class="text-[11px] font-bold uppercase tracking-wider text-n-ruby-11"
+          >
+            {{ L.TOTAL_FIXES }}
+          </p>
+          <p class="mt-2 text-[28px] font-semibold tabular-nums text-n-ruby-12">
+            {{ totalFixes.toLocaleString('en') }}
+          </p>
+        </div>
+        <div
           class="rounded-xl border border-n-weak bg-n-teal-2 p-4 ring-1 ring-n-teal-6"
         >
           <p
@@ -236,30 +438,53 @@ const applyCustom = () => {
           </p>
         </div>
         <div
-          class="rounded-xl border border-n-weak bg-n-ruby-2 p-4 ring-1 ring-n-ruby-6"
-        >
-          <p
-            class="text-[11px] font-bold uppercase tracking-wider text-n-ruby-11"
-          >
-            {{ L.SENT_ORIGINAL }}
-          </p>
-          <p class="mt-2 text-[28px] font-semibold tabular-nums text-n-ruby-12">
-            {{ (summary.decisions.sent_original || 0).toLocaleString('en') }}
-          </p>
-        </div>
-        <div
           class="rounded-xl border border-n-weak bg-n-amber-2 p-4 ring-1 ring-n-amber-6"
         >
           <p
             class="text-[11px] font-bold uppercase tracking-wider text-n-amber-11"
           >
-            {{ L.EDITED }}
+            {{ L.SENT_ORIGINAL }}
           </p>
           <p
             class="mt-2 text-[28px] font-semibold tabular-nums text-n-amber-12"
           >
-            {{ (summary.decisions.edited || 0).toLocaleString('en') }}
+            {{ (summary.decisions.sent_original || 0).toLocaleString('en') }}
           </p>
+        </div>
+      </div>
+
+      <!-- Global category breakdown -->
+      <div
+        v-if="globalCategories.length"
+        class="rounded-xl border border-n-weak bg-n-solid-1 p-5"
+      >
+        <h2 class="text-[15px] font-semibold text-n-slate-12">
+          {{ L.CATEGORIES_TITLE }}
+        </h2>
+        <p class="mt-1 text-[12px] text-n-slate-11">{{ L.CATEGORIES_HINT }}</p>
+        <!-- Proportion bar -->
+        <div
+          class="mt-4 flex h-3 w-full overflow-hidden rounded-full bg-n-alpha-2"
+        >
+          <span
+            v-for="[cat, n] in globalCategories"
+            :key="cat"
+            :class="categoryDot(cat)"
+            :style="{ width: (100 * n) / totalFixes + '%' }"
+            :title="`${categoryLabel(cat)}: ${n}`"
+          />
+        </div>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <span
+            v-for="[cat, n] in globalCategories"
+            :key="cat"
+            class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-medium"
+            :class="categoryChip(cat)"
+          >
+            <span class="size-2 rounded-full" :class="categoryDot(cat)" />
+            {{ categoryLabel(cat) }}
+            <span class="font-bold tabular-nums">{{ n }}</span>
+          </span>
         </div>
       </div>
 
@@ -269,9 +494,7 @@ const applyCustom = () => {
           <h2 class="text-[15px] font-semibold text-n-slate-12">
             {{ L.COMPARE }}
           </h2>
-          <p class="mt-1 text-[12px] text-n-slate-11">
-            {{ L.COMPARE_HINT }}
-          </p>
+          <p class="mt-1 text-[12px] text-n-slate-11">{{ L.COMPARE_HINT }}</p>
         </div>
 
         <div
@@ -293,6 +516,9 @@ const applyCustom = () => {
                 {{ L.COL_TOTAL }}
               </th>
               <th class="px-3 py-3 text-center font-semibold tabular-nums">
+                {{ L.COL_ERR_RATE }}
+              </th>
+              <th class="px-3 py-3 text-center font-semibold tabular-nums">
                 {{ L.COL_ERRORS }}
               </th>
               <th class="px-3 py-3 text-center font-semibold">
@@ -304,35 +530,55 @@ const applyCustom = () => {
             </tr>
           </thead>
           <tbody>
-            <tr
-              v-for="agent in byAgent"
-              :key="agent.user_id || 'na'"
-              class="border-b border-n-weak/60 last:border-0 hover:bg-n-alpha-1"
-            >
-              <td class="px-5 py-3">
-                <p class="font-semibold text-n-slate-12">{{ agent.name }}</p>
-                <p
-                  v-if="agent.email"
-                  class="mt-0.5 text-[11px] text-n-slate-10"
+            <!-- eslint-disable-next-line vue/no-v-for-template-key -->
+            <template v-for="agent in byAgent" :key="agentKey(agent)">
+              <tr
+                class="cursor-pointer border-b border-n-weak/60 hover:bg-n-alpha-1"
+                @click="toggleAgent(agent)"
+              >
+                <td class="px-5 py-3">
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="i-lucide-chevron-left size-4 text-n-slate-10 transition-transform"
+                      :class="isExpanded(agent) ? '-rotate-90' : ''"
+                      aria-hidden="true"
+                    />
+                    <div>
+                      <p class="font-semibold text-n-slate-12">
+                        {{ agent.name }}
+                      </p>
+                      <p
+                        v-if="agent.email"
+                        class="mt-0.5 text-[11px] text-n-slate-10"
+                      >
+                        {{ agent.email }}
+                      </p>
+                    </div>
+                  </div>
+                </td>
+                <td
+                  class="px-3 py-3 text-center text-[14px] font-semibold tabular-nums text-n-slate-12"
                 >
-                  {{ agent.email }}
-                </p>
-              </td>
-              <td
-                class="px-3 py-3 text-center text-[14px] font-semibold tabular-nums text-n-slate-12"
-              >
-                {{ agent.total }}
-              </td>
-              <td
-                class="px-3 py-3 text-center text-[14px] font-semibold tabular-nums text-n-ruby-11"
-              >
-                {{ agent.errors_caught }}
-              </td>
-              <td class="px-3 py-3">
-                <!-- Stacked bar showing decision breakdown -->
-                <div class="flex items-center gap-2">
+                  {{ agent.total }}
+                </td>
+                <td
+                  class="px-3 py-3 text-center text-[14px] font-semibold tabular-nums"
+                  :class="
+                    errorRate(agent) >= 40
+                      ? 'text-n-ruby-11'
+                      : 'text-n-slate-11'
+                  "
+                >
+                  {{ errorRate(agent) }}%
+                </td>
+                <td
+                  class="px-3 py-3 text-center text-[14px] font-semibold tabular-nums text-n-ruby-11"
+                >
+                  {{ agent.errors_caught }}
+                </td>
+                <td class="px-3 py-3">
                   <div
-                    class="flex h-4 flex-1 overflow-hidden rounded-full bg-n-alpha-2"
+                    class="flex h-4 overflow-hidden rounded-full bg-n-alpha-2"
                     :style="{
                       width:
                         ((100 * agent.total) / maxAgentTotal).toFixed(1) + '%',
@@ -357,34 +603,190 @@ const applyCustom = () => {
                       :title="`رجع للتعديل: ${agent.decisions.edited}`"
                     />
                   </div>
-                </div>
-                <div
-                  class="mt-1.5 flex gap-3 text-[10.5px] font-medium tabular-nums"
+                  <div
+                    class="mt-1.5 flex gap-3 text-[10.5px] font-medium tabular-nums"
+                  >
+                    <span class="text-n-teal-11"
+                      >{{ '✓ ' }}{{ correctedRate(agent) }}{{ '%' }}</span
+                    >
+                    <span class="text-n-ruby-11"
+                      >{{ '! ' }}{{ sentOriginalRate(agent) }}{{ '%' }}</span
+                    >
+                    <span class="text-n-amber-11"
+                      >{{ '✎ ' }}{{ editedRate(agent) }}{{ '%' }}</span
+                    >
+                  </div>
+                </td>
+                <td
+                  class="px-5 py-3 text-center text-[14px] font-semibold tabular-nums"
+                  :class="
+                    correctedRate(agent) >= 50
+                      ? 'text-n-teal-11'
+                      : 'text-n-slate-11'
+                  "
                 >
-                  <span class="text-n-teal-11"
-                    >{{ '✓ ' }}{{ correctedRate(agent) }}{{ '%' }}</span
-                  >
-                  <span class="text-n-ruby-11"
-                    >{{ '! ' }}{{ sentOriginalRate(agent) }}{{ '%' }}</span
-                  >
-                  <span class="text-n-amber-11"
-                    >{{ '✎ ' }}{{ editedRate(agent) }}{{ '%' }}</span
-                  >
-                </div>
-              </td>
-              <td
-                class="px-5 py-3 text-center text-[14px] font-semibold tabular-nums"
-                :class="
-                  correctedRate(agent) >= 50
-                    ? 'text-n-teal-11'
-                    : 'text-n-slate-11'
-                "
+                  {{ correctedRate(agent) }}%
+                </td>
+              </tr>
+              <!-- Drill-down -->
+              <tr
+                v-if="isExpanded(agent)"
+                :key="`${agentKey(agent)}-detail`"
+                class="border-b border-n-weak/60"
               >
-                {{ correctedRate(agent) }}%
-              </td>
-            </tr>
+                <td colspan="6" class="bg-n-alpha-1 px-5 py-4">
+                  <div class="grid gap-5 md:grid-cols-2">
+                    <!-- Agent category mix -->
+                    <div>
+                      <p
+                        class="mb-2 text-[11px] font-bold uppercase tracking-wider text-n-slate-11"
+                      >
+                        {{ L.AGENT_CATEGORIES }}
+                      </p>
+                      <div
+                        v-if="agentCategories(agent).length"
+                        class="flex flex-wrap gap-2"
+                      >
+                        <span
+                          v-for="[cat, n] in agentCategories(agent)"
+                          :key="cat"
+                          class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-medium"
+                          :class="categoryChip(cat)"
+                        >
+                          <span
+                            class="size-2 rounded-full"
+                            :class="categoryDot(cat)"
+                          />
+                          {{ categoryLabel(cat) }}
+                          <span class="font-bold tabular-nums">{{ n }}</span>
+                        </span>
+                      </div>
+                      <p v-else class="text-[12px] text-n-slate-10">
+                        {{ L.NO_MISTAKES }}
+                      </p>
+                    </div>
+                    <!-- Agent top mistakes -->
+                    <div>
+                      <p
+                        class="mb-2 text-[11px] font-bold uppercase tracking-wider text-n-slate-11"
+                      >
+                        {{ L.AGENT_TOP }}
+                      </p>
+                      <ul
+                        v-if="agent.top_mistakes && agent.top_mistakes.length"
+                        class="flex flex-col gap-1.5"
+                      >
+                        <li
+                          v-for="(m, i) in agent.top_mistakes"
+                          :key="i"
+                          class="flex items-center gap-2 text-[13px]"
+                        >
+                          <span
+                            class="rounded bg-n-ruby-3 px-1.5 py-0.5 font-semibold text-n-ruby-12"
+                            >{{ m.wrong }}</span
+                          >
+                          <span
+                            class="i-lucide-arrow-left size-3.5 text-n-slate-9"
+                            aria-hidden="true"
+                          />
+                          <span
+                            class="rounded bg-n-teal-3 px-1.5 py-0.5 font-semibold text-n-teal-12"
+                            >{{ m.right }}</span
+                          >
+                          <span class="text-[11px] text-n-slate-10"
+                            >{{ m.count }} {{ L.TIMES }}</span
+                          >
+                        </li>
+                      </ul>
+                      <p v-else class="text-[12px] text-n-slate-10">
+                        {{ L.NO_MISTAKES }}
+                      </p>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
+      </div>
+
+      <!-- Global top mistakes -->
+      <div
+        v-if="topMistakes.length"
+        class="rounded-xl border border-n-weak bg-n-solid-1 p-5"
+      >
+        <h2 class="text-[15px] font-semibold text-n-slate-12">
+          {{ L.TOP_TITLE }}
+        </h2>
+        <p class="mt-1 text-[12px] text-n-slate-11">{{ L.TOP_HINT }}</p>
+        <ul class="mt-4 grid gap-2 sm:grid-cols-2">
+          <li
+            v-for="(m, i) in topMistakes"
+            :key="i"
+            class="flex items-center gap-2 rounded-lg bg-n-alpha-1 px-3 py-2 text-[13px]"
+          >
+            <span
+              class="w-5 text-[12px] font-bold tabular-nums text-n-slate-10"
+              >{{ i + 1 }}</span
+            >
+            <span
+              class="rounded bg-n-ruby-3 px-1.5 py-0.5 font-semibold text-n-ruby-12"
+              >{{ m.wrong }}</span
+            >
+            <span
+              class="i-lucide-arrow-left size-3.5 text-n-slate-9"
+              aria-hidden="true"
+            />
+            <span
+              class="rounded bg-n-teal-3 px-1.5 py-0.5 font-semibold text-n-teal-12"
+              >{{ m.right }}</span
+            >
+            <span
+              class="ms-auto inline-flex items-center gap-1.5 text-[11px] text-n-slate-10"
+            >
+              <span
+                class="size-1.5 rounded-full"
+                :class="categoryDot(m.category)"
+              />
+              {{ categoryLabel(m.category) }}
+              <span class="font-bold text-n-slate-11">{{ m.count }}</span>
+            </span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Daily activity trend -->
+      <div
+        v-if="byDay.length"
+        class="rounded-xl border border-n-weak bg-n-solid-1 p-5"
+      >
+        <h2 class="text-[15px] font-semibold text-n-slate-12">
+          {{ L.TREND_TITLE }}
+        </h2>
+        <div class="mt-4 flex h-[120px] items-end gap-1.5">
+          <div
+            v-for="d in byDay"
+            :key="d.date"
+            class="group/bar flex h-full flex-1 flex-col items-center justify-end gap-1"
+          >
+            <span
+              class="text-[10px] tabular-nums text-n-slate-10 opacity-0 group-hover/bar:opacity-100"
+            >
+              {{ dayTotal(d) }}
+            </span>
+            <div
+              class="w-full rounded-t bg-n-brand/70 transition-colors group-hover/bar:bg-n-brand"
+              :style="{
+                height: (100 * dayTotal(d)) / maxDayTotal + '%',
+                minHeight: dayTotal(d) ? '3px' : '0',
+              }"
+              :title="`${d.date}: ${dayTotal(d)}`"
+            />
+            <span class="text-[9px] tabular-nums text-n-slate-9">
+              {{ dayLabel(d.date) }}
+            </span>
+          </div>
+        </div>
       </div>
 
       <!-- Legend -->

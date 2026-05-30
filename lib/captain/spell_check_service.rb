@@ -36,6 +36,13 @@ class Captain::SpellCheckService < Captain::BaseTaskService
   }.freeze
   DEFAULT_STRICTNESS = 3
 
+  # Evaluation mode pins a consistent, accurate ruler for staff scoring:
+  # everyone is measured by `mini` (nano hallucinates phantom errors that
+  # unfairly inflate counts) at a fixed strictness, regardless of the
+  # live agent-facing slider or the cost-saving long-message strategy.
+  # Off by default so normal accounts keep the cheap nano behaviour.
+  DEFAULT_EVAL_STRICTNESS = 4
+
   def perform
     stripped = content.to_s.strip
     return empty_result if stripped.empty?
@@ -58,6 +65,21 @@ class Captain::SpellCheckService < Captain::BaseTaskService
     raw.between?(1, 6) ? raw : DEFAULT_STRICTNESS
   end
 
+  def evaluation_mode?
+    account.spell_check_settings.to_h['evaluation_mode'] == true
+  end
+
+  def evaluation_strictness
+    raw = account.spell_check_settings.to_h['evaluation_strictness'].to_i
+    raw.between?(1, 6) ? raw : DEFAULT_EVAL_STRICTNESS
+  end
+
+  # The strictness that actually runs (and gets logged): the fixed
+  # evaluation level when evaluation mode is on, otherwise the live slider.
+  def effective_strictness
+    evaluation_mode? ? evaluation_strictness : strictness
+  end
+
   def strategy
     raw = account.spell_check_settings.to_h['long_message_strategy'].to_s
     VALID_STRATEGIES.include?(raw) ? raw : DEFAULT_STRATEGY
@@ -70,21 +92,29 @@ class Captain::SpellCheckService < Captain::BaseTaskService
   #   hybrid → nano under the threshold, mini above it
   # Returns the model name to call, or nil to skip the API call entirely.
   def pick_model(stripped)
+    # Evaluation mode forces the accurate model everywhere — overrides the
+    # cost-saving strategy so logged ground-truth is consistent.
+    return MINI_MODEL if evaluation_mode?
+
     long = stripped.length >= LONG_MESSAGE_THRESHOLD
-    case strategy
+    strategy_model(strategy, long)
+  end
+
+  def strategy_model(mode, long)
+    case mode
     when 'skip' then long ? nil : NANO_MODEL
-    when 'nano' then NANO_MODEL
     when 'mini' then MINI_MODEL
     when 'hybrid' then long ? MINI_MODEL : NANO_MODEL
-    else NANO_MODEL
+    else NANO_MODEL # 'nano' and any unknown value default to the cheap model
     end
   end
 
   def system_prompt
+    level = effective_strictness
     template = prompt_from_file('spell_check')
     Liquid::Template.parse(template).render(
-      'strictness' => strictness,
-      'strictness_label' => STRICTNESS_LABELS[strictness]
+      'strictness' => level,
+      'strictness_label' => STRICTNESS_LABELS[level]
     )
   end
 
@@ -115,44 +145,10 @@ class Captain::SpellCheckService < Captain::BaseTaskService
   # than surfacing raw JSON in the modal.
   def parse_response(raw)
     parsed = extract_json(raw)
-    if parsed.nil? || !parsed.is_a?(Hash) || parsed['corrected'].nil?
-      Rails.logger.warn "[spell_check] malformed JSON (len=#{raw.length}): #{raw[0, 120]}"
-      return safe_no_errors_result
-    end
+    corrected = usable_corrected(parsed, raw)
+    return safe_no_errors_result if corrected.nil?
 
-    corrected = parsed['corrected'].to_s
-
-    if corrected.match?(JSON_LEAK_RE)
-      Rails.logger.warn "[spell_check] JSON leaked into corrected text: #{corrected[0, 120]}"
-      return safe_no_errors_result
-    end
-
-    # If the model claimed fixes but the corrected string is byte-for-
-    # byte equivalent to the original (after whitespace normalisation),
-    # the fixes are ghosts — the model imagined a problem but didn't
-    # actually rewrite anything. Opening a modal in this case shows two
-    # identical blocks and confuses the agent ("which letter is wrong?
-    # they look the same"). Treat as a clean message.
-    if equivalent?(content, corrected)
-      Rails.logger.warn '[spell_check] ghost fixes — corrected matches original verbatim'
-      return safe_no_errors_result
-    end
-
-    fixes = Array(parsed['fixes']).filter_map do |fix|
-      next unless fix.is_a?(Hash)
-
-      wrong = fix['wrong'].to_s.strip
-      right = fix['right'].to_s.strip
-      next if wrong.empty? || right.empty?
-      # Drop phantom fixes — the model sometimes reports a "correction"
-      # where wrong == right (it picked up an informal word but then
-      # decided not to change it). These would render as highlighted
-      # pills with no actual diff, which confuses the agent.
-      next if normalize(wrong) == normalize(right)
-
-      { wrong: wrong, right: right, why: fix['why'].to_s.strip }
-    end
-
+    fixes = build_fixes(parsed['fixes'])
     {
       # Authoritative signal: if the model reported zero real fixes,
       # treat the message as clean even when whitespace/punctuation drifted.
@@ -161,6 +157,46 @@ class Captain::SpellCheckService < Captain::BaseTaskService
       corrected: corrected,
       fixes: fixes
     }
+  end
+
+  # Returns the corrected string when the response is safe to surface,
+  # else nil (after logging why). Rejects three garbled shapes nano emits
+  # on long inputs: malformed JSON, leaked JSON metadata in the text, and
+  # ghost fixes where the corrected string equals the original verbatim
+  # (which would render two identical blocks and confuse the agent).
+  def usable_corrected(parsed, raw)
+    if parsed.nil? || !parsed.is_a?(Hash) || parsed['corrected'].nil?
+      Rails.logger.warn "[spell_check] malformed JSON (len=#{raw.length}): #{raw[0, 120]}"
+      return nil
+    end
+
+    corrected = parsed['corrected'].to_s
+    if corrected.match?(JSON_LEAK_RE)
+      Rails.logger.warn "[spell_check] JSON leaked into corrected text: #{corrected[0, 120]}"
+      return nil
+    end
+    if equivalent?(content, corrected)
+      Rails.logger.warn '[spell_check] ghost fixes — corrected matches original verbatim'
+      return nil
+    end
+
+    corrected
+  end
+
+  # Normalise the model's fix list: drop non-hashes, blanks, and phantom
+  # fixes where wrong == right (the model flagged a word then decided not
+  # to change it — would render a highlighted pill with no actual diff).
+  def build_fixes(raw_fixes)
+    Array(raw_fixes).filter_map do |fix|
+      next unless fix.is_a?(Hash)
+
+      wrong = fix['wrong'].to_s.strip
+      right = fix['right'].to_s.strip
+      next if wrong.empty? || right.empty?
+      next if normalize(wrong) == normalize(right)
+
+      { wrong: wrong, right: right, why: fix['why'].to_s.strip }
+    end
   end
 
   # Drop-in result for malformed model output. Better to silently pass
@@ -176,7 +212,7 @@ class Captain::SpellCheckService < Captain::BaseTaskService
     return nil unless match
 
     JSON.parse(match[0])
-  rescue JSON::ParserError, StandardError
+  rescue StandardError
     nil
   end
 
@@ -190,30 +226,32 @@ class Captain::SpellCheckService < Captain::BaseTaskService
   # Wrapped in rescue so an audit-log failure can never break a customer
   # reply — we'd rather lose a stat than block an agent.
   def record_event(model_used, result)
-    fixes_count = Array(result[:fixes]).size
-    decision = result[:has_errors] ? 'pending' : 'no_errors_send'
-
-    event = account.spell_check_events.create!(
-      user_id: user_id,
-      conversation_id: conversation_id,
-      inbox_id: inbox_id,
-      surface: surface,
-      strictness: strictness,
-      model_used: model_used,
-      has_errors: result[:has_errors] ? true : false,
-      errors_count: fixes_count,
-      original_length: content.to_s.length,
-      corrected_length: result[:corrected].to_s.length,
-      decision: decision
-    )
+    event = account.spell_check_events.create!(event_attributes(model_used, result))
     @event_id = event.id
+    SpellCheckFix.record_for(event, result[:fixes])
   rescue StandardError => e
     Rails.logger.warn "[spell_check] event log failed: #{e.message[0, 120]}"
     @event_id = nil
   end
 
-  def equivalent?(a, b)
-    normalize(a) == normalize(b)
+  def event_attributes(model_used, result)
+    {
+      user_id: user_id,
+      conversation_id: conversation_id,
+      inbox_id: inbox_id,
+      surface: surface,
+      strictness: effective_strictness,
+      model_used: model_used,
+      has_errors: result[:has_errors] ? true : false,
+      errors_count: Array(result[:fixes]).size,
+      original_length: content.to_s.length,
+      corrected_length: result[:corrected].to_s.length,
+      decision: result[:has_errors] ? 'pending' : 'no_errors_send'
+    }
+  end
+
+  def equivalent?(original, candidate)
+    normalize(original) == normalize(candidate)
   end
 
   def normalize(text)

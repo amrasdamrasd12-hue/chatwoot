@@ -11,6 +11,8 @@ class SpellCheckEvent < ApplicationRecord
   belongs_to :conversation, optional: true
   belongs_to :inbox, optional: true
 
+  has_many :spell_check_fixes, dependent: :destroy_async
+
   validates :decision, inclusion: { in: DECISIONS }
   validates :surface, inclusion: { in: SURFACES }, allow_nil: true
 

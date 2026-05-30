@@ -12,6 +12,8 @@ export const useSpellCheckSettingsStore = defineStore('spellCheckSettings', {
       comments_enabled: false,
       strictness: 3,
       long_message_strategy: 'skip',
+      evaluation_mode: false,
+      evaluation_strictness: 4,
     },
     strictnessLabels: {
       1: 'سطحي جداً',
