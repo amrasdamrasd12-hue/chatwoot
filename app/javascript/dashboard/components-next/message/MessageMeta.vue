@@ -156,9 +156,11 @@ const fbPageUiTooltip =
 
 const isEdited = computed(() => !!contentAttributes.value?.previousContent);
 const editedLabel = '✎ تم التعديل';
-const editedTooltip = computed(
-  () => `الرسالة قبل التعديل:\n${contentAttributes.value?.previousContent}`
-);
+const editedTooltip = computed(() => ({
+  content: `<div dir="rtl" class="text-right"><div class="text-[10px] font-semibold opacity-60 mb-1">الرسالة قبل التعديل</div><div>${contentAttributes.value?.previousContent}</div></div>`,
+  html: true,
+  placement: 'top',
+}));
 
 const showReadLabel = computed(
   () => isRead.value && (isAFacebookInbox.value || isAnInstagramChannel.value)
@@ -182,8 +184,8 @@ const showReadLabel = computed(
     </span>
     <span
       v-if="isEdited"
-      :title="editedTooltip"
-      class="inline-flex items-center cursor-help rounded-md bg-n-slate-3 px-1.5 py-px text-[10px] font-medium leading-none text-n-slate-11"
+      v-tooltip="editedTooltip"
+      class="inline-flex items-center cursor-help rounded-md bg-amber-100 px-1.5 py-px text-[10px] font-semibold leading-none text-amber-700 ring-1 ring-amber-300"
     >
       {{ editedLabel }}
     </span>
