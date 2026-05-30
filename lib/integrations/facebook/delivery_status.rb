@@ -14,12 +14,12 @@ class Integrations::Facebook::DeliveryStatus
   private
 
   def process_delivery_status
-    timestamp = Time.zone.at(params.delivery_watermark.to_i).to_datetime.utc
+    timestamp = Time.zone.at(params.delivery_watermark.to_f / 1000)
     ::Conversations::UpdateMessageStatusJob.perform_later(conversation.id, timestamp, :delivered)
   end
 
   def process_read_status
-    timestamp = Time.zone.at(params.read_watermark.to_i).to_datetime.utc
+    timestamp = Time.zone.at(params.read_watermark.to_f / 1000)
     ::Conversations::UpdateMessageStatusJob.perform_later(conversation.id, timestamp, :read)
   end
 
@@ -28,7 +28,10 @@ class Integrations::Facebook::DeliveryStatus
   end
 
   def conversation
-    @conversation ||= ::Conversation.find_by(contact_id: contact.id) if contact.present?
+    @conversation ||= if contact.present?
+                        ::Conversation.where(contact_id: contact.id, inbox_id: facebook_channel.inbox.id)
+                                      .order(last_activity_at: :desc).first
+                      end
   end
 
   def facebook_channel
