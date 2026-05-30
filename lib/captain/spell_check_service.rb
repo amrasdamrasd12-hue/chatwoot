@@ -53,7 +53,7 @@ class Captain::SpellCheckService < Captain::BaseTaskService
     response = make_api_call(model: model_to_use, messages: messages)
     return response if response.is_a?(Hash) && response[:error]
 
-    result = parse_response(response[:message].to_s)
+    result = Captain::SpellCheckLevelFilter.apply(parse_response(response[:message].to_s), effective_strictness)
     record_event(model_to_use, result)
     result.merge(event_id: @event_id)
   end

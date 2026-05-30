@@ -1,0 +1,47 @@
+# Eltafouk: deterministic guardrail over the model's proposed fixes.
+# nano routinely ignores the prompt's per-level rules (it "normalises"
+# correct greetings like أهلًا at level 1, adding OR stripping
+# hamza/tanween, and even hallucinates the wrong-word). So we categorise
+# every fix it returns and keep only the ones this strictness level
+# actually permits — the guarantee the prompt alone can't give. Pure
+# function: takes the parsed result + level, returns a filtered result.
+module Captain::SpellCheckLevelFilter
+  module_function
+
+  # Each fix category is allowed from this strictness upward — mirrors the
+  # per-level rules in the spell_check Liquid template.
+  CATEGORY_MIN_LEVEL = {
+    'letter_missing' => 1, 'letter_extra' => 1, 'letter_wrong' => 1, 'other' => 1,
+    'hamza' => 3, 'taa' => 3, 'ya' => 3,
+    'tanween' => 4, 'diacritic' => 5, 'punctuation' => 6
+  }.freeze
+
+  # Drop fixes the model invented (wrong word absent from the original) or
+  # that this level forbids, then rebuild the corrected string from only
+  # the survivors. Nothing survives → clean: the agent's text passes
+  # through untouched and no modal opens.
+  def apply(result, level)
+    return result unless result[:has_errors]
+
+    original = result[:original].to_s
+    kept = Array(result[:fixes]).select { |fix| allowed?(fix, level, original) }
+    return clean(original) if kept.empty?
+
+    { has_errors: true, original: original, corrected: rebuild(original, kept), fixes: kept }
+  end
+
+  def allowed?(fix, level, original)
+    return false unless original.include?(fix[:wrong].to_s)
+
+    category = Captain::SpellCheckCategorizer.category_for(fix[:wrong], fix[:right])
+    level >= CATEGORY_MIN_LEVEL.fetch(category, 1)
+  end
+
+  def rebuild(original, fixes)
+    fixes.reduce(original) { |text, fix| text.sub(fix[:wrong].to_s, fix[:right].to_s) }
+  end
+
+  def clean(original)
+    { has_errors: false, original: original, corrected: original, fixes: [] }
+  end
+end
