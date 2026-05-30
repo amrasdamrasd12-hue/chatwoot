@@ -55,22 +55,30 @@ class Captain::BaseTaskService
   end
 
   def execute_ruby_llm_request(model:, messages:, tools: [])
-    Llm::Config.with_api_key(api_key, api_base: api_base) do |context|
-      chat = build_chat(context, model: model, messages: messages, tools: tools)
-
-      conversation_messages = messages.reject { |m| m[:role] == 'system' }
-      return { error: 'No conversation messages provided', error_code: 400, request_messages: messages } if conversation_messages.empty?
-
-      add_messages_if_needed(chat, conversation_messages)
-      build_ruby_llm_response(chat.ask(conversation_messages.last[:content]), messages)
+    if Llm::Config.vertex?
+      # Eltafouk: route every Captain task to Gemini on Vertex AI (covered
+      # by the Ultra $100/mo Cloud credit). The requested gpt-* model is
+      # overridden to the configured Gemini model.
+      Llm::Config.with_vertex { |context| run_llm(context, Llm::Config::VERTEX_MODEL, messages, tools, :vertexai) }
+    else
+      Llm::Config.with_api_key(api_key, api_base: api_base) { |context| run_llm(context, model, messages, tools, nil) }
     end
   rescue StandardError => e
     ChatwootExceptionTracker.new(e, account: account).capture_exception
     { error: e.message, request_messages: messages }
   end
 
-  def build_chat(context, model:, messages:, tools: [])
-    chat = context.chat(model: model)
+  def run_llm(context, model, messages, tools, provider)
+    conversation_messages = messages.reject { |m| m[:role] == 'system' }
+    return { error: 'No conversation messages provided', error_code: 400, request_messages: messages } if conversation_messages.empty?
+
+    chat = build_chat(context, model: model, messages: messages, tools: tools, provider: provider)
+    add_messages_if_needed(chat, conversation_messages)
+    build_ruby_llm_response(chat.ask(conversation_messages.last[:content]), messages)
+  end
+
+  def build_chat(context, model:, messages:, tools: [], provider: nil)
+    chat = provider ? context.chat(model: model, provider: provider, assume_model_exists: true) : context.chat(model: model)
     system_msg = messages.find { |m| m[:role] == 'system' }
     chat.with_instructions(system_msg[:content]) if system_msg
 
@@ -145,7 +153,7 @@ class Captain::BaseTaskService
   end
 
   def api_key_configured?
-    api_key.present?
+    Llm::Config.vertex? || api_key.present?
   end
 
   def api_key
