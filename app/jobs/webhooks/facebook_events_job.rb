@@ -12,18 +12,6 @@ class Webhooks::FacebookEventsJob < MutexApplicationJob
   end
 
   def process_message(response)
-    if response.edited?
-      update_message(response)
-    else
-      ::Integrations::Facebook::MessageCreator.new(response).perform
-    end
-  end
-
-  def update_message(response)
-    message = Message.find_by(source_id: response.identifier)
-    return unless message && response.content.present?
-
-    message.update!(content: response.content)
-    message.send_update_event
+    ::Integrations::Facebook::MessageCreator.new(response).perform
   end
 end

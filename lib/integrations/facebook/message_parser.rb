@@ -67,10 +67,6 @@ class Integrations::Facebook::MessageParser
   def in_reply_to_external_id
     @messaging.dig('message', 'reply_to', 'mid')
   end
-
-  def edited?
-    @messaging.dig('message', 'is_edited') == true
-  end
 end
 
 # Sample Response

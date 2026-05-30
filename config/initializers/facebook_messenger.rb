@@ -44,8 +44,9 @@ Rails.application.reloader.to_prepare do
     Webhooks::FacebookEventsJob.set(wait: 2.seconds).perform_later(message.to_json)
   end
 
-  # Extend Bot::EVENTS to support reaction events (the gem parses them but doesn't whitelist them)
+  # Extend Bot::EVENTS to support reaction and message_edit events (the gem parses them but doesn't whitelist them)
   Facebook::Messenger::Bot::EVENTS.push(:reaction) unless Facebook::Messenger::Bot::EVENTS.include?(:reaction)
+  Facebook::Messenger::Bot::EVENTS.push(:message_edit) unless Facebook::Messenger::Bot::EVENTS.include?(:message_edit)
 
   Facebook::Messenger::Bot.on :reaction do |reaction|
     reaction_json = JSON.parse(reaction.to_json)
@@ -76,6 +77,22 @@ Rails.application.reloader.to_prepare do
 
     target_message.content_attributes['reactions'] = reactions
     target_message.save!
+    target_message.send_update_event
+  end
+
+  Facebook::Messenger::Bot.on :message_edit do |event|
+    event_json = JSON.parse(event.to_json)
+    messaging = event_json['messaging'] || event_json
+    edit_data = messaging['message_edit'] || event_json['message_edit']
+    next unless edit_data
+
+    mid = edit_data['mid']
+    new_text = edit_data['text']
+
+    target_message = Message.find_by(source_id: mid)
+    next unless target_message && new_text.present?
+
+    target_message.update!(content: new_text)
     target_message.send_update_event
   end
 end
