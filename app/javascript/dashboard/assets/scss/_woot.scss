@@ -88,10 +88,11 @@ $instagram-pattern: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/
     background-color: #E4E6EB !important;
     &, .prose-bubble, .prose-bubble * { color: #050505 !important; }
   }
-  .right-bubble.bg-n-solid-blue, 
+  .right-bubble.bg-n-solid-blue,
   .right-bubble.bg-n-solid-iris {
     background: linear-gradient(135deg, #0084FF 0%, #A436F1 100%) !important;
     &, .prose-bubble, .prose-bubble *, .text-n-slate-11, .text-n-slate-10, [class*="text-"] { color: #FFFFFF !important; }
+    [class*="7EB6FF"] { color: #39FF14 !important; }
   }
 
   .bg-n-alpha-2, .bg-n-alpha-3 { background-color: transparent !important; }
@@ -106,10 +107,11 @@ $instagram-pattern: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/
     background-color: #3E4042 !important;
     &, .prose-bubble, .prose-bubble * { color: #E4E6EB !important; }
   }
-  .right-bubble.bg-n-solid-blue, 
+  .right-bubble.bg-n-solid-blue,
   .right-bubble.bg-n-solid-iris {
     background: linear-gradient(135deg, #0084FF 0%, #A436F1 100%) !important;
     &, .prose-bubble, .prose-bubble *, .text-n-slate-11, .text-n-slate-10, [class*="text-"] { color: #FFFFFF !important; }
+    [class*="7EB6FF"] { color: #39FF14 !important; }
   }
 
   .bg-n-alpha-2, .bg-n-alpha-3 { background-color: transparent !important; }
@@ -127,17 +129,18 @@ $instagram-pattern: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/
     background-color: #EFEFEF !important;
     &, .prose-bubble, .prose-bubble * { color: #000000 !important; }
   }
-  .right-bubble.bg-n-solid-blue, 
+  .right-bubble.bg-n-solid-blue,
   .right-bubble.bg-n-solid-iris {
     background: linear-gradient(135deg, #3797F0 0%, #8A3AB9 100%) !important;
     &, .prose-bubble, .prose-bubble *, .text-n-slate-11, .text-n-slate-10, [class*="text-"] { color: #FFFFFF !important; }
+    [class*="7EB6FF"] { color: #39FF14 !important; }
   }
 
   .bg-n-alpha-2, .bg-n-alpha-3 { background-color: transparent !important; }
 }
 .dark .bg-instagram-pattern {
   background-color: #000000;
-  background-image: 
+  background-image:
     url($instagram-pattern),
     linear-gradient(135deg, rgba(253,29,29,0.05) 0%, rgba(252,176,69,0.05) 100%);
   background-size: 150px 150px, 100% 100%;
@@ -147,10 +150,11 @@ $instagram-pattern: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/
     background-color: #262626 !important;
     &, .prose-bubble, .prose-bubble * { color: #FFFFFF !important; }
   }
-  .right-bubble.bg-n-solid-blue, 
+  .right-bubble.bg-n-solid-blue,
   .right-bubble.bg-n-solid-iris {
     background: linear-gradient(135deg, #3797F0 0%, #8A3AB9 100%) !important;
     &, .prose-bubble, .prose-bubble *, .text-n-slate-11, .text-n-slate-10, [class*="text-"] { color: #FFFFFF !important; }
+    [class*="7EB6FF"] { color: #39FF14 !important; }
   }
 
   .bg-n-alpha-2, .bg-n-alpha-3 { background-color: transparent !important; }
