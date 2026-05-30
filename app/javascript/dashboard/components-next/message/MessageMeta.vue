@@ -159,6 +159,10 @@ const editedLabel = '✎ تم التعديل';
 const editedTooltip = computed(
   () => `الرسالة قبل التعديل:\n${contentAttributes.value?.previous_content}`
 );
+
+const showReadLabel = computed(
+  () => isRead.value && (isAFacebookInbox.value || isAnInstagramChannel.value)
+);
 </script>
 
 <template>
@@ -185,6 +189,9 @@ const editedTooltip = computed(
     </span>
     <Icon v-if="isPrivate" icon="i-lucide-lock-keyhole" class="size-3" />
     <MessageStatus v-if="showStatusIndicator" :status="statusToShow" />
+    <span v-if="showReadLabel" class="inline opacity-75">
+      {{ t('CHAT_LIST.MESSAGE_READ') }}
+    </span>
   </div>
 </template>
 `
