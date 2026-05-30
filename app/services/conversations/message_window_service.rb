@@ -2,13 +2,8 @@ class Conversations::MessageWindowService
   MESSAGING_WINDOW_24_HOURS = 24.hours
   MESSAGING_WINDOW_7_DAYS = 7.days
 
-  def initialize(conversation, last_incoming_message: nil)
+  def initialize(conversation)
     @conversation = conversation
-    # Eltafouk: list endpoints preload the latest incoming message in a
-    # single bulk query and hand it in so we skip the per-row lookup.
-    # When unset (single-record callers), `last_incoming_message` does
-    # its own scoped query as before.
-    @last_incoming_message = last_incoming_message
   end
 
   def can_reply?

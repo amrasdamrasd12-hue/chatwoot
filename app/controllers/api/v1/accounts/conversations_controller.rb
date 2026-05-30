@@ -2,11 +2,9 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
   include Events::Types
   include DateRangeHelper
   include HmacConcern
-  include ConversationListPreloader
 
   before_action :conversation, except: [:index, :meta, :search, :create, :filter]
   before_action :inbox, :contact, :contact_inbox, only: [:create]
-  around_action :clear_preload_slots_on_error, only: [:index, :filter, :search]
 
   ATTACHMENT_RESULTS_PER_PAGE = 100
 
@@ -14,7 +12,6 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
     result = conversation_finder.perform
     @conversations = result[:conversations]
     @conversations_count = result[:count]
-    preload_conversation_list_metadata(@conversations)
   end
 
   def meta
@@ -26,7 +23,6 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
     result = conversation_finder.perform
     @conversations = result[:conversations]
     @conversations_count = result[:count]
-    preload_conversation_list_metadata(@conversations)
   end
 
   def attachments
@@ -55,7 +51,6 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
     result = ::Conversations::FilterService.new(params.permit!, current_user, current_account).perform
     @conversations = result[:conversations]
     @conversations_count = result[:count]
-    preload_conversation_list_metadata(@conversations)
   rescue CustomExceptions::CustomFilter::InvalidAttribute,
          CustomExceptions::CustomFilter::InvalidOperator,
          CustomExceptions::CustomFilter::InvalidQueryOperator,
@@ -148,16 +143,6 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
   end
 
   private
-
-  # Eltafouk: around_action guarantees Thread.current preload slots are
-  # cleared even when the action raises. With after_action the cleanup
-  # was skipped on exception, leaving stale data for the next request
-  # served by the same Puma thread.
-  def clear_preload_slots_on_error
-    yield
-  ensure
-    clear_conversation_list_preload
-  end
 
   def permitted_update_params
     # TODO: Move the other conversation attributes to this method and remove specific endpoints for each attribute

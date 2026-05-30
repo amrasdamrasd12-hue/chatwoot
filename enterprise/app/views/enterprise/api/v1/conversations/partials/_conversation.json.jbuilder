@@ -1,10 +1,4 @@
-# Eltafouk: the conversation-list (index) endpoint passes `slim: true`
-# to skip the SLA blocks — the card-level SLA badge was already
-# dropped via sla_policy_id and the detail view re-renders applied_sla
-# / sla_events via the show endpoint.
-slim = local_assigns.fetch(:slim, false)
-
-if !slim && conversation.account.feature_enabled?('sla')
+if conversation.account.feature_enabled?('sla')
   json.applied_sla do
     json.partial! 'api/v1/models/applied_sla', formats: [:json], resource: conversation.applied_sla if conversation.applied_sla.present?
   end

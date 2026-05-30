@@ -153,42 +153,10 @@ class Message < ApplicationRecord
     merge_sender_attributes(data)
   end
 
-  # Eltafouk: trimmed payload for the conversation-list (unread / index)
-  # response. Drops the heavy fields ConversationCard.vue + MessagePreview.vue
-  # don't read (processed_message_content, sentiment, source_id,
-  # external_source_ids, additional_attributes, conversation block, full
-  # sender block). Keeps `status`, `private`, and `content_attributes` —
-  # MessagePreview needs them for delivery ticks, private-note lock icon,
-  # email subject, and the fb_page_ui chip on relayed comments. All three
-  # are columns on the already-loaded message row, so cost is negligible.
-  def push_event_data_slim
-    data = {
-      id: id,
-      content: content,
-      account_id: account_id,
-      inbox_id: inbox_id,
-      conversation_id: conversation&.display_id,
-      message_type: message_type_before_type_cast,
-      content_type: content_type,
-      status: status,
-      private: private,
-      content_attributes: content_attributes,
-      sender_type: sender_type,
-      sender_id: sender_id,
-      created_at: created_at.to_i
-    }
-    data[:attachments] = attachments.map(&:push_event_data) if attachments.present?
-    merge_slim_sender_attributes(data)
-  end
-
   def conversation_push_event_data
     {
       assignee_id: conversation.assignee_id,
-      # Eltafouk: route through the cached helper so the conversation-list
-      # endpoints reuse the bulk preload instead of firing one COUNT query
-      # per embedded message. Single-record callers fall back to the
-      # original `.count` lookup transparently.
-      unread_count: conversation.cached_unread_incoming_count,
+      unread_count: conversation.unread_incoming_messages.count,
       last_activity_at: conversation.last_activity_at.to_i,
       contact_inbox: { source_id: conversation.contact_inbox.source_id }
     }
@@ -197,25 +165,6 @@ class Message < ApplicationRecord
   def merge_sender_attributes(data)
     data[:sender] = sender.push_event_data if sender && !sender.is_a?(AgentBot)
     data[:sender] = sender.push_event_data(inbox) if sender.is_a?(AgentBot)
-    data
-  end
-
-  # Eltafouk: slim sender block for push_event_data_slim — only the
-  # fields ConversationCard / MessagePreview / sender-type discriminators
-  # actually consume on the list screen.
-  def merge_slim_sender_attributes(data)
-    return data unless sender
-
-    data[:sender] = if sender.is_a?(AgentBot)
-                      { id: sender.id, name: sender.name, thumbnail: sender.avatar_url, type: 'agent_bot' }
-                    else
-                      {
-                        id: sender.id,
-                        name: sender.try(:name),
-                        thumbnail: sender.try(:avatar_url),
-                        type: sender_type.to_s.downcase
-                      }
-                    end
     data
   end
 

@@ -79,17 +79,10 @@ Rails.application.configure do
   # require 'syslog/logger'
   config.logger = ActiveSupport::Logger.new(Rails.root.join('log', "#{Rails.env}.log"), 1, ENV.fetch('LOG_SIZE', '1024').to_i.megabytes)
 
-  # Eltafouk: Bullet adds ~5s to every conversations#index request on the
-  # prod-sized dataset (end-of-request N+1 scan walks 5k+ AR objects from
-  # the deep includes chain). Default OFF; turn back on with BULLET=1 when
-  # actively hunting N+1s.
+  # Bullet configuration to fix the N+1 queries
   config.after_initialize do
-    if ENV.fetch('BULLET', 'false') == 'true'
-      Bullet.enable = true
-      Bullet.bullet_logger = true
-      Bullet.rails_logger = true
-    else
-      Bullet.enable = false
-    end
+    Bullet.enable = true
+    Bullet.bullet_logger = true
+    Bullet.rails_logger = true
   end
 end

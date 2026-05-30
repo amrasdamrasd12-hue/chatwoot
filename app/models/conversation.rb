@@ -89,18 +89,10 @@ class Conversation < ApplicationRecord
   # a broader definition (catches "never replied" rows with no unread
   # activity).
   scope :with_unread_incoming, lambda {
-    # Row-local pre-filter narrows the candidate set on the conversations row
-    # itself (no join needed) BEFORE the EXISTS subquery probes messages.
-    # `last_activity_at > agent_last_seen_at` is a necessary condition because
-    # any new message bumps last_activity_at — so an unread incoming implies it.
-    # EXISTS avoids the 24-column DISTINCT sort that was spilling to disk.
-    where('conversations.agent_last_seen_at IS NULL OR conversations.last_activity_at > conversations.agent_last_seen_at')
-      .where(
-        'EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = conversations.id ' \
-        'AND m.message_type = ? ' \
-        'AND (conversations.agent_last_seen_at IS NULL OR m.created_at > conversations.agent_last_seen_at))',
-        Message.message_types[:incoming]
-      )
+    joins(:messages)
+      .where(messages: { message_type: Message.message_types[:incoming] })
+      .where('conversations.agent_last_seen_at IS NULL OR messages.created_at > conversations.agent_last_seen_at')
+      .distinct
   }
   scope :resolvable_not_waiting, lambda { |auto_resolve_after|
     return none if auto_resolve_after.to_i.zero?
@@ -196,20 +188,6 @@ class Conversation < ApplicationRecord
 
   def unread_incoming_messages
     unread_messages.where(account_id: account_id).incoming.last(10)
-  end
-
-  # Eltafouk: hot-path variant used by jbuilder partials and
-  # Message#conversation_push_event_data on the conversation-list
-  # endpoints. Reads from the ConversationListPreloader bulk-count
-  # cache when the controller has primed it, falling back to the
-  # legacy per-row `.count` query for single-record callers.
-  # Without this short-circuit, every embedded last_message in a
-  # 505-row list fires its own `.count` query → ~505 extra round-trips.
-  def cached_unread_incoming_count
-    preloaded = Thread.current[:conv_preload_unread_counts]
-    return preloaded[id] || 0 if preloaded
-
-    unread_incoming_messages.count
   end
 
   def cached_label_list_array
