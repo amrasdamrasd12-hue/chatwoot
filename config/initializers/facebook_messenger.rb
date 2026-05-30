@@ -44,9 +44,14 @@ Rails.application.reloader.to_prepare do
     Webhooks::FacebookEventsJob.set(wait: 2.seconds).perform_later(message.to_json)
   end
 
-  # Extend Bot::EVENTS to support reaction and message_edit events (the gem parses them but doesn't whitelist them)
-  Facebook::Messenger::Bot::EVENTS.push(:reaction) unless Facebook::Messenger::Bot::EVENTS.include?(:reaction)
-  Facebook::Messenger::Bot::EVENTS.push(:message_edit) unless Facebook::Messenger::Bot::EVENTS.include?(:message_edit)
+  # Extend Bot::EVENTS with custom events not whitelisted by the gem.
+  # The array may be frozen after first push, so we redefine the constant entirely.
+  custom_events = %i[reaction message_edit]
+  unless custom_events.all? { |e| Facebook::Messenger::Bot::EVENTS.include?(e) }
+    new_events = (Facebook::Messenger::Bot::EVENTS.to_a + custom_events).uniq
+    Facebook::Messenger::Bot.send(:remove_const, :EVENTS)
+    Facebook::Messenger::Bot.const_set(:EVENTS, new_events)
+  end
 
   Facebook::Messenger::Bot.on :reaction do |reaction|
     reaction_json = JSON.parse(reaction.to_json)
