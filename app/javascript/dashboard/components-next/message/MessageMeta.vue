@@ -158,13 +158,14 @@ const fbPageUiTooltip =
 const isEdited = computed(() => !!contentAttributes.value?.previousContent);
 const editedLabel = '✎ تم التعديل';
 const editedTooltip = computed(() => ({
-  content: `<div dir="rtl" style="text-align:right;min-width:160px;max-width:260px;padding:4px 2px"><div style="font-size:10px;font-weight:600;color:#9ca3af;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">الرسالة الأصلية</div><div style="font-size:12.5px;color:#111827;line-height:1.6;word-break:break-word">${escapeHtml(contentAttributes.value?.previousContent ?? '')}</div></div>`,
+  content: `<div dir="rtl" style="text-align:center;padding:12px 16px;min-width:120px;max-width:220px"><div style="font-size:10px;font-weight:700;color:#9ca3af;margin-bottom:10px;letter-spacing:0.06em;text-transform:uppercase">الرسالة الأصلية</div><div style="font-size:13px;color:#111827;line-height:1.65;word-break:break-word">${escapeHtml(contentAttributes.value?.previousContent ?? '')}</div></div>`,
   html: true,
-  placement: 'top',
+  placement: 'bottom-start',
   triggers: ['click'],
   theme: 'dropdown',
   autoHide: true,
-  distance: 8,
+  distance: 6,
+  skidding: -4,
 }));
 </script>
 
@@ -186,7 +187,7 @@ const editedTooltip = computed(() => ({
     <span
       v-if="isEdited"
       v-tooltip="editedTooltip"
-      class="inline-flex items-center cursor-pointer select-none rounded-full bg-teal-500 px-2 py-0.5 text-[10px] font-semibold leading-none text-white transition-all duration-150 hover:bg-teal-600 active:scale-95"
+      class="inline-flex items-center cursor-pointer select-none rounded-full bg-[#00C853] px-2 py-0.5 text-[10px] font-bold leading-none text-white shadow-sm shadow-green-400/40 transition-all duration-150 hover:brightness-110 active:scale-95"
     >
       {{ editedLabel }}
     </span>
