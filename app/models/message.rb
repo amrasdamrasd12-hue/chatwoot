@@ -175,7 +175,8 @@ class Message < ApplicationRecord
       content_attributes: content_attributes,
       sender_type: sender_type,
       sender_id: sender_id,
-      created_at: created_at.to_i
+      created_at: created_at.to_i,
+      source_id: source_id
     }
     data[:attachments] = attachments.map(&:push_event_data) if attachments.present?
     merge_slim_sender_attributes(data)
