@@ -44,13 +44,29 @@ Rails.application.reloader.to_prepare do
     Webhooks::FacebookEventsJob.set(wait: 2.seconds).perform_later(message.to_json)
   end
 
-  # Extend Bot::EVENTS with custom events not whitelisted by the gem.
-  # The array may be frozen after first push, so we redefine the constant entirely.
-  custom_events = %i[reaction message_edit]
-  unless custom_events.all? { |e| Facebook::Messenger::Bot::EVENTS.include?(e) }
-    new_events = (Facebook::Messenger::Bot::EVENTS.to_a + custom_events).uniq
+  # Register message_edit event — the gem has no built-in support for it.
+  # We need three steps: (1) define a parser class, (2) add it to Incoming::EVENTS
+  # (a frozen Hash used by parse()), and (3) add the symbol to Bot::EVENTS
+  # (a frozen Array checked by Bot.on).
+  unless Facebook::Messenger::Incoming.const_defined?(:MessageEdit)
+    Facebook::Messenger::Incoming.const_set(
+      :MessageEdit,
+      Class.new { include Facebook::Messenger::Incoming::Common }
+    )
+  end
+
+  unless Facebook::Messenger::Incoming::EVENTS.key?('message_edit')
+    new_incoming = Facebook::Messenger::Incoming::EVENTS.merge(
+      'message_edit' => Facebook::Messenger::Incoming::MessageEdit
+    )
+    Facebook::Messenger::Incoming.send(:remove_const, :EVENTS)
+    Facebook::Messenger::Incoming.const_set(:EVENTS, new_incoming)
+  end
+
+  unless Facebook::Messenger::Bot::EVENTS.include?(:message_edit)
+    new_bot_events = Facebook::Messenger::Bot::EVENTS.to_a + [:message_edit]
     Facebook::Messenger::Bot.send(:remove_const, :EVENTS)
-    Facebook::Messenger::Bot.const_set(:EVENTS, new_events)
+    Facebook::Messenger::Bot.const_set(:EVENTS, new_bot_events)
   end
 
   Facebook::Messenger::Bot.on :reaction do |reaction|
@@ -86,18 +102,13 @@ Rails.application.reloader.to_prepare do
   end
 
   Facebook::Messenger::Bot.on :message_edit do |event|
-    event_json = JSON.parse(event.to_json)
-    messaging = event_json['messaging'] || event_json
-    edit_data = messaging['message_edit'] || event_json['message_edit']
+    edit_data = event.messaging['message_edit']
     next unless edit_data
 
-    mid = edit_data['mid']
-    new_text = edit_data['text']
+    target_message = Message.find_by(source_id: edit_data['mid'])
+    next unless target_message && edit_data['text'].present?
 
-    target_message = Message.find_by(source_id: mid)
-    next unless target_message && new_text.present?
-
-    target_message.update!(content: new_text)
+    target_message.update!(content: edit_data['text'])
     target_message.send_update_event
   end
 end
