@@ -193,6 +193,30 @@ const fmtSecs = s => {
   if (s < 3600) return `${Math.round(s / 60)} د`;
   return `${(s / 3600).toFixed(1)} س`;
 };
+const fmtTime12 = timeStr => {
+  if (!timeStr) return '—';
+  const parts = timeStr.split(':');
+  if (parts.length < 2) return timeStr;
+  let h = parseInt(parts[0], 10);
+  const m = parts[1];
+  const ampm = h >= 12 ? 'pm' : 'am';
+  h %= 12;
+  if (h === 0) h = 12;
+  return `${h}:${m} ${ampm}`;
+};
+const fmtHour12 = h => {
+  if (h == null || h === -1) return '—';
+  const ampm = h >= 12 ? 'pm' : 'am';
+  let h12 = h % 12;
+  if (h12 === 0) h12 = 12;
+  return `${h12}:00 ${ampm}`;
+};
+const fmtHourLabel = h => {
+  const ampm = h >= 12 ? 'pm' : 'am';
+  let h12 = h % 12;
+  if (h12 === 0) h12 = 12;
+  return `${h12}${ampm}`;
+};
 const initials = name =>
   (name || '?')
     .trim()
@@ -208,7 +232,7 @@ const channelShare = key =>
 
 const peakHourLabel = computed(() => {
   const h = summary.value?.busiest_hour;
-  return h ? `${h.hour}${L.HOUR_SUFFIX}` : '—';
+  return h ? fmtHour12(h.hour) : '—';
 });
 const peakDayLabel = computed(() => summary.value?.busiest_day?.date || '—');
 const peakHour = computed(() => summary.value?.busiest_hour?.hour ?? -1);
@@ -291,13 +315,16 @@ const kpis = computed(() => {
 
 const shiftLabel = a => {
   if (a.active_days === 1 && a.daily[0]) {
-    return `${a.daily[0].shift_start} – ${a.daily[0].shift_end}`;
+    return `${fmtTime12(a.daily[0].shift_start)} – ${fmtTime12(a.daily[0].shift_end)}`;
   }
   return `${a.active_days} ${L.DAYS}`;
 };
 const shiftTitle = a =>
   a.daily
-    .map(d => `${d.date}: ${d.shift_start}–${d.shift_end} (${d.total})`)
+    .map(
+      d =>
+        `${d.date}: ${fmtTime12(d.shift_start)}–${fmtTime12(d.shift_end)} (${d.total})`
+    )
     .join('\n');
 
 const csvCell = v => {
@@ -533,7 +560,7 @@ const exportCsv = () => {
                 : 'bg-n-brand/35 hover:bg-n-brand/60'
             "
             :style="{ height: `${maxHour ? (100 * count) / maxHour : 0}%` }"
-            :title="`${hour}${L.HOUR_SUFFIX} — ${count}`"
+            :title="`${fmtHour12(hour)} — ${count}`"
           />
         </div>
         <div class="mt-1.5 flex gap-1">
@@ -542,7 +569,7 @@ const exportCsv = () => {
             :key="hour"
             class="flex-1 text-center text-[9px] tabular-nums text-n-slate-10"
           >
-            {{ hour }}
+            {{ fmtHourLabel(hour) }}
           </span>
         </div>
       </div>
