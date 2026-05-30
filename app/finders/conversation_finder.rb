@@ -171,20 +171,52 @@ class ConversationFinder
   end
 
   def set_count_for_all_conversations
-    [
-      @conversations.assigned_to(current_user).count,
-      @conversations.unassigned.count,
-      @conversations.count
-    ]
+    # Eltafouk perf: collapse 3 sequential COUNTs into a single aggregate
+    # pass. Each prior COUNT re-ran the EXISTS subquery (e.g.
+    # `with_unread_incoming`) over the full conversations table — ~1.5s
+    # cold each. Postgres `FILTER` lets us compute mine/unassigned/all
+    # in one go while preserving identical filter semantics
+    # (assignee_id = current_user / assignee_id IS NULL / no filter).
+    result = @conversations.unscope(:order).select(
+      "COUNT(*) FILTER (WHERE conversations.assignee_id = #{current_user.id.to_i}) AS mine_count,
+       COUNT(*) FILTER (WHERE conversations.assignee_id IS NULL) AS unassigned_count,
+       COUNT(*) AS all_count"
+    ).take
+
+    [result.mine_count.to_i, result.unassigned_count.to_i, result.all_count.to_i]
   end
 
   def current_page
     params[:page] || 1
   end
 
+  # Eltafouk: when the "غير مقروء" pill is pressed, the client asks for
+  # all unread rows in a single request via per_page. Capped at 1000 so
+  # a runaway/misconfigured client can't ask for tens of thousands of
+  # rows and blow up the JSON serializer or the browser. Default stays
+  # the historical env-controlled 25 so the unfiltered list keeps its
+  # progressive-load behaviour.
+  def conversations_per_page
+    default = ENV.fetch('CONVERSATION_RESULTS_PER_PAGE', '25').to_i
+    requested = params[:per_page].to_i
+    return [requested, 1000].min if requested.positive?
+
+    default
+  end
+
   def conversations_base_query
+    # Eltafouk: drop `:taggings` — labels are read from the cached
+    # column `cached_label_list_array`, so eager-loading taggings is
+    # pure waste. Add `:account_users` on assignee (needed by
+    # `User#current_account_user` inside `_agent.json.jbuilder` for
+    # availability_status) and `:channel` on inbox (needed by
+    # `MessageWindowService` to decide can_reply? on the 24h-window
+    # channels). Both were silent per-row queries on the 505-row list.
     @conversations.includes(
-      :taggings, :inbox, { assignee: { avatar_attachment: [:blob] } }, { contact: { avatar_attachment: [:blob] } }, :team, :contact_inbox
+      { inbox: :channel }, :assignee_agent_bot,
+      { assignee: [{ avatar_attachment: [:blob] }, :account_users] },
+      { contact: { avatar_attachment: [:blob] } },
+      :team, :contact_inbox
     )
   end
 
@@ -197,7 +229,7 @@ class ConversationFinder
     if params[:updated_within].present?
       @conversations.where('conversations.updated_at > ?', Time.zone.now - params[:updated_within].to_i.seconds)
     else
-      @conversations.page(current_page).per(ENV.fetch('CONVERSATION_RESULTS_PER_PAGE', '25').to_i)
+      @conversations.page(current_page).per(conversations_per_page)
     end
   end
 end

@@ -65,7 +65,15 @@ const actions = {
   fetchFilteredConversations: async ({ commit, dispatch }, params) => {
     commit(types.SET_LIST_LOADING_STATUS);
     try {
-      const { data } = await ConversationApi.filter(params);
+      // Eltafouk: forward perPage + conversationType so the filter
+      // endpoint can honour them the same way the index endpoint does
+      // when the "غير مقروء" pill is on (large page + unread overlay).
+      const { data } = await ConversationApi.filter({
+        queryData: params.queryData,
+        page: params.page,
+        perPage: params.perPage,
+        conversationType: params.conversationType,
+      });
       buildConversationList(
         { commit, dispatch },
         params,

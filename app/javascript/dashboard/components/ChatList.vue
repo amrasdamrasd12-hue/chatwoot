@@ -9,6 +9,7 @@ import {
   watch,
   onMounted,
   defineEmits,
+  nextTick,
 } from 'vue';
 import { useStore } from 'vuex';
 import { useRoute, useRouter } from 'vue-router';
@@ -99,6 +100,13 @@ const activeAssigneeTab = ref(wootConstants.ASSIGNEE_TYPE.ME);
 const activeStatus = ref(wootConstants.STATUS_TYPE.OPEN);
 const activeSortBy = ref(wootConstants.SORT_BY_TYPE.LAST_ACTIVITY_AT_DESC);
 const showUnreadOnly = ref(false);
+// Eltafouk perf: gate the watcher's heavy auto-paginate loop on a real
+// user click. Without this the watcher fires on initial mount (HMR
+// replay / double-mount during layout settle) and burns ~7.5s of
+// backend round-trips before the agent has touched anything.
+// Anyone who needs to programmatically flip showUnreadOnly to "on" and
+// have it behave like a click MUST also set this flag to true.
+const hasUserToggledUnread = ref(false);
 const showAdvancedFilters = ref(false);
 // chatsOnView is to store the chats that are currently visible on the screen,
 // which mirrors the conversationList.
@@ -291,12 +299,20 @@ const conversationFilters = computed(() => {
   // drifted the displayed list away from the badge count.
   const effectiveConversationType =
     props.conversationType || (showUnreadOnly.value ? 'unread' : undefined);
+  // Eltafouk: when "غير مقروء" is on, ask the backend for the entire
+  // unread set in one shot (capped server-side at 1000) instead of the
+  // default 25-row page. For accounts whose unread total exceeds 1000
+  // the remainder falls through to the standard pagination loop in the
+  // showUnreadOnly watcher — those rows still get loaded, just in
+  // additional 1000-row chunks rather than in the first response.
+  const perPage = showUnreadOnly.value ? 1000 : undefined;
   return {
     inboxId: props.conversationInbox ? props.conversationInbox : undefined,
     assigneeType: activeAssigneeTab.value,
     status: activeStatus.value,
     sortBy: activeSortBy.value,
     page: conversationListPagination.value,
+    perPage,
     labels: props.label ? [props.label] : undefined,
     teamId: props.teamId || undefined,
     conversationType: effectiveConversationType,
@@ -475,26 +491,33 @@ function emitConversationLoaded() {
   // });
 }
 
-function fetchFilteredConversations(payload) {
+function fetchFilteredConversations(payload, extra = {}) {
   payload = useSnakeCase(payload);
   let page = currentFiltersPage.value + 1;
-  store
-    .dispatch('fetchFilteredConversations', {
-      queryData: filterQueryGenerator(payload),
-      page,
-    })
-    .then(emitConversationLoaded);
+  const dispatched = store.dispatch('fetchFilteredConversations', {
+    queryData: filterQueryGenerator(payload),
+    page,
+    // Eltafouk: when the "غير مقروء" pill is on, the watcher passes
+    // perPage:1000 + conversationType:'unread' so the filter endpoint
+    // returns the whole unread set in one shot (same behaviour as the
+    // index endpoint). Unset on regular filter use → backend default.
+    perPage: extra.perPage,
+    conversationType: extra.conversationType,
+  });
 
   showAdvancedFilters.value = false;
+  return dispatched.then(emitConversationLoaded);
 }
 
-function fetchSavedFilteredConversations(payload) {
+function fetchSavedFilteredConversations(payload, extra = {}) {
   payload = useSnakeCase(payload);
   let page = currentFiltersPage.value + 1;
-  store
+  return store
     .dispatch('fetchFilteredConversations', {
       queryData: payload,
       page,
+      perPage: extra.perPage,
+      conversationType: extra.conversationType,
     })
     .then(emitConversationLoaded);
 }
@@ -669,10 +692,20 @@ function resetAndFetchData() {
   fetchConversations();
 }
 
+let lastRequestedPage = 0;
 function loadMoreConversations() {
   if (hasCurrentPageEndReached.value || chatListLoading.value) {
     return;
   }
+  // Eltafouk: the IntersectionObserver can fire several times within a
+  // single tick (during layout/scroll bursts) before the dispatched
+  // fetch flips chatListLoading=true on the next microtask. Without
+  // this guard each fire queues a duplicate page request that the
+  // backend dutifully processes — wasted seconds on top of the
+  // legitimate fetch.
+  const nextPage = currentFiltersPage.value + 1;
+  if (nextPage === lastRequestedPage) return;
+  lastRequestedPage = nextPage;
 
   if (!hasAppliedFiltersOrActiveFolders.value) {
     fetchConversations();
@@ -988,9 +1021,141 @@ watch(
 // is summed from those counts) doesn't lag behind the live meta result
 // that drives the tab counters — agents reported a 17-vs-18 drift when
 // the cached sidebar values were stale.
-watch(showUnreadOnly, () => {
+watch(showUnreadOnly, async newVal => {
+  // Skip the heavy unread-loop on mount-time / HMR-replay firings.
+  // Only proceed when the value change traces back to a real click on
+  // either of the two toggle buttons (which set hasUserToggledUnread).
+  if (!hasUserToggledUnread.value) return;
+
   store.dispatch('inboxes/fetchUnattendedCounts');
-  resetAndFetchData();
+
+  if (!newVal) {
+    resetAndFetchData();
+    return;
+  }
+
+  // Eltafouk perf instrumentation: log each phase of the unread toggle so
+  // we can pinpoint where the perceived seconds actually go in DevTools.
+  // Strip this block once the bottleneck is conclusively identified.
+  const perfT0 = performance.now();
+  const perfMark = (label, extra = '') => {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[unread-perf] ${label} t+${(performance.now() - perfT0).toFixed(0)}ms${extra ? ' ' + extra : ''}`
+    );
+  };
+  perfMark('watcher:start');
+
+  // Eltafouk: when "غير مقروء" is toggled ON, auto-paginate until
+  // every unread conversation in the current scope is loaded. Without
+  // this the agent would have to scroll through ~20 pages of 25 each
+  // to reach the full unread set. Hard-capped at 50 pages (1,250 rows)
+  // so a runaway never floods the backend; the virtual scroller
+  // handles that many rows fine.
+  appliedFilter.value = [];
+  resetBulkActions();
+  store.dispatch('conversationPage/reset');
+  store.dispatch('emptyAllConversations');
+  store.dispatch('clearConversationFilters');
+
+  // Eltafouk: `emptyAllConversations` clears the store synchronously,
+  // but `chatsOnView` is driven by a `watch(chatLists, …)` that flushes
+  // on the next tick — without this await, the loop's `lenBefore`
+  // would still reflect the residual list (~25 rows from the initial
+  // folder load), making `added = N - 25 < perPage` trigger the
+  // tail-detect short-circuit one page too early and clip ~25 unread
+  // rows off the displayed total.
+  await nextTick();
+
+  // Eltafouk: pick the right fetch path for the current view. Folder /
+  // custom-view routes (e.g. "جميع قنوات التعليقات", saved filters)
+  // go through `POST /conversations/filter` with the saved query +
+  // `conversation_type=unread` overlay; ad-hoc applied filters do the
+  // same but with the user's filter payload; the plain conversation
+  // list uses `GET /conversations` via `fetchAllConversations`. All
+  // three honour `per_page` server-side (capped at 1000).
+  //
+  // Eltafouk: the comments folder ("جميع قنوات التعليقات") trips on
+  // the jbuilder partial cost — 619 unread rows × the slim partial
+  // costs ~1.5s of Views time, plus the Egypt→edge round-trip on a
+  // single 2.7 MB response. Asking for smaller pages sequentially
+  // makes the FIRST batch land in ~700-900 ms instead of 3+ seconds:
+  // the user sees real rows immediately and the rest stream in behind
+  // while they're reading the top of the list. The plain index path
+  // (`fetchAllConversations`) stays on 1000 — its rows-per-second is
+  // ~3x faster (lighter partial, no permission-filter overhead) so
+  // chunking buys nothing there.
+  const folderQuery = hasActiveFolders.value ? activeFolder.value.query : null;
+  const isFilterPath = Boolean(folderQuery) || hasAppliedFilters.value;
+  const requestedPerPage = isFilterPath ? 250 : 1000;
+
+  let safety = 50;
+  let pageIdx = 0;
+  while (
+    safety > 0 &&
+    showUnreadOnly.value &&
+    !hasCurrentPageEndReached.value
+  ) {
+    safety -= 1;
+    pageIdx += 1;
+    const lenBefore = chatsOnView.value.length;
+    store.dispatch('updateChatListFilters', conversationFilters.value);
+    const fetchT0 = performance.now();
+    perfMark(`page${pageIdx}:fetch:before`);
+    if (folderQuery) {
+      // eslint-disable-next-line no-await-in-loop
+      await fetchSavedFilteredConversations(folderQuery, {
+        perPage: requestedPerPage,
+        conversationType: 'unread',
+      });
+    } else if (hasAppliedFilters.value) {
+      // eslint-disable-next-line no-await-in-loop
+      await fetchFilteredConversations(appliedFilters.value, {
+        perPage: requestedPerPage,
+        conversationType: 'unread',
+      });
+    } else {
+      // eslint-disable-next-line no-await-in-loop
+      await store.dispatch('fetchAllConversations');
+    }
+    perfMark(
+      `page${pageIdx}:fetch:after`,
+      `(fetch ${(performance.now() - fetchT0).toFixed(0)}ms, rows=${chatsOnView.value.length})`
+    );
+    // eslint-disable-next-line no-await-in-loop
+    await nextTick();
+    const added = chatsOnView.value.length - lenBefore;
+    perfMark(
+      `page${pageIdx}:nextTick:after`,
+      `(added=${added}, chatsOnView=${chatsOnView.value.length})`
+    );
+    // The backend runs the same expensive scope+sort even when the
+    // page is empty, so a probe request to confirm "no more rows" costs
+    // as much as a real data fetch (~6s on the prod-sized schema).
+    // Detect the tail of the unread set straight from the response size:
+    // a page that didn't fill `per_page=1000` is the last one. On the
+    // filter path `chatsOnView` is fed by `chatLists.value` (which the
+    // server replaces wholesale on each page), so `added` is the new
+    // rows that arrived this iteration — same semantics as the index
+    // path's append-only behaviour for tail-detection purposes.
+    if (added < requestedPerPage) {
+      // CRITICAL: tell the pagination store we hit the tail, otherwise the
+      // virtual scroller's IntersectionObserver fires loadMoreConversations()
+      // a few seconds after first paint and burns another 5-second backend
+      // round-trip producing zero new rows. `actionHelpers#setPageFilter`
+      // only flips this flag when the server returns an empty page, which
+      // never happens on our short-circuit path.
+      store.dispatch('conversationPage/setEndReached', {
+        filter: currentPageFilterKey.value,
+      });
+      break;
+    }
+  }
+  emitConversationLoaded();
+  perfMark(
+    'watcher:done',
+    `(pages=${pageIdx}, chatsOnView=${chatsOnView.value.length}, path=${isFilterPath ? 'filter' : 'index'})`
+  );
 });
 
 watch(activeFolder, (newVal, oldVal) => {
@@ -1007,16 +1172,33 @@ watch(chatLists, () => {
 watch(conversationFilters, (newVal, oldVal) => {
   if (newVal !== oldVal) {
     store.dispatch('updateChatListFilters', newVal);
-    // Keep the unread badge in lockstep with the post-filter tab
-    // counts: same /meta endpoint, same scope params, the only delta
-    // is `conversation_type=unread`. Strip our own showUnreadOnly
-    // injection (conversationType: 'unread') so getUnread is always
-    // the canonical unread-meta call regardless of whether the agent
-    // currently has the filter pill pressed.
-    store.dispatch('conversationStats/getUnread', {
-      ...newVal,
-      conversationType: undefined,
-    });
+    // Eltafouk: skip the parallel /meta refresh when the only thing
+    // that changed is the showUnreadOnly toggle (or our injected
+    // per_page bump). The showUnreadOnly watcher already kicks off
+    // fetchAllConversations + an inboxes/unattended_counts refresh —
+    // adding a third concurrent /meta call burns ~300-500ms of Postgres
+    // contention without surfacing any number the user actually sees
+    // until the main fetch returns. Only refresh getUnread on changes
+    // that genuinely shift the badge scope (inbox / assignee / status /
+    // label / team).
+    const scopeShifted =
+      newVal.inboxId !== oldVal?.inboxId ||
+      newVal.assigneeType !== oldVal?.assigneeType ||
+      newVal.status !== oldVal?.status ||
+      newVal.teamId !== oldVal?.teamId ||
+      JSON.stringify(newVal.labels) !== JSON.stringify(oldVal?.labels);
+    if (scopeShifted) {
+      // Keep the unread badge in lockstep with the post-filter tab
+      // counts: same /meta endpoint, same scope params, the only delta
+      // is `conversation_type=unread`. Strip our own showUnreadOnly
+      // injection (conversationType: 'unread') so getUnread is always
+      // the canonical unread-meta call regardless of whether the agent
+      // currently has the filter pill pressed.
+      store.dispatch('conversationStats/getUnread', {
+        ...newVal,
+        conversationType: undefined,
+      });
+    }
   }
 });
 </script>
@@ -1046,7 +1228,10 @@ watch(conversationFilters, (newVal, oldVal) => {
       @filters-modal="onToggleAdvanceFiltersModal"
       @reset-filters="resetAndFetchData"
       @basic-filter-change="onBasicFilterChange"
-      @toggle-folder-unread="showUnreadOnly = !showUnreadOnly"
+      @toggle-folder-unread="
+        hasUserToggledUnread = true;
+        showUnreadOnly = !showUnreadOnly;
+      "
     />
 
     <TeleportWithDirection
@@ -1097,7 +1282,10 @@ watch(conversationFilters, (newVal, oldVal) => {
             : 'bg-white text-n-slate-12 ring-n-alpha-2 hover:ring-n-slate-7 hover:bg-n-alpha-1 shadow-sm ps-2 pe-1.5',
           unreadCountInCurrentView === 0 ? 'pe-2' : '',
         ]"
-        @click="showUnreadOnly = !showUnreadOnly"
+        @click="
+          hasUserToggledUnread = true;
+          showUnreadOnly = !showUnreadOnly;
+        "
       >
         <fluent-icon icon="mail-unread" size="10" />
         <span>{{ $t('CHAT_LIST.UNREAD') }}</span>
@@ -1155,10 +1343,9 @@ watch(conversationFilters, (newVal, oldVal) => {
             :active="active"
             :data-index="index"
             :size-dependencies="[
-              item.messages,
-              item.labels,
-              item.uuid,
-              item.inbox_id,
+              item.labels?.length,
+              item.custom_attributes?.comment_deleted_at,
+              item.additional_attributes?.call_status,
             ]"
           >
             <ConversationItem

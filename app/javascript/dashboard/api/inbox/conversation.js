@@ -11,6 +11,7 @@ class ConversationApi extends ApiClient {
     status,
     assigneeType,
     page,
+    perPage,
     labels,
     teamId,
     conversationType,
@@ -24,6 +25,7 @@ class ConversationApi extends ApiClient {
         status,
         assignee_type: assigneeType,
         page,
+        per_page: perPage,
         labels,
         conversation_type: conversationType,
         sort_by: sortBy,
@@ -36,6 +38,13 @@ class ConversationApi extends ApiClient {
     return axios.post(`${this.url}/filter`, payload.queryData, {
       params: {
         page: payload.page,
+        // Eltafouk: parity with the index endpoint — `per_page` lets the
+        // unread loop pull the full set in one round-trip (capped at
+        // 1000 server-side); `conversation_type=unread` layers the same
+        // EXISTS scope the sidebar badge uses on top of any saved filter
+        // (e.g. "AllComments") so folder views narrow correctly.
+        per_page: payload.perPage,
+        conversation_type: payload.conversationType,
       },
     });
   }
