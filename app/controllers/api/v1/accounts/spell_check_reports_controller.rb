@@ -48,7 +48,8 @@ class Api::V1::Accounts::SpellCheckReportsController < Api::V1::Accounts::BaseCo
     message_subquery = <<-SQL.squish
       SELECT id FROM messages
       WHERE messages.conversation_id = spell_check_events.conversation_id
-      AND messages.user_id = spell_check_events.user_id
+      AND messages.sender_id = spell_check_events.user_id
+      AND messages.sender_type = 'User'
       AND messages.created_at >= spell_check_events.created_at
       ORDER BY messages.created_at ASC
       LIMIT 1
