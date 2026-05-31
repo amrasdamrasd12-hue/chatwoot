@@ -25,11 +25,12 @@ class MarketingCommentModerationController < ActionController::API
     return render(json: { ok: false, error: 'unauthorized' }, status: :unauthorized) if expected.empty? || secret != expected
 
     conv_id = params[:conversation_id].to_i
+    comment_id = params[:comment_id].to_s
     action_kind = params[:kind].to_s
     return render(json: { ok: false, error: 'missing_params' }, status: :bad_request) if conv_id.zero?
     return render(json: { ok: false, error: 'invalid_kind' }, status: :bad_request) unless %w[hide unhide delete].include?(action_kind)
 
-    conv = Conversation.find_by(id: conv_id)
+    conv = resolve_conversation(comment_id, conv_id)
     return render(json: { ok: true, found: false }) if conv.nil?
 
     attrs = (conv.custom_attributes || {}).deep_dup
@@ -68,6 +69,15 @@ class MarketingCommentModerationController < ActionController::API
   end
 
   private
+
+  def resolve_conversation(comment_id, fallback_conv_id)
+    return Conversation.find_by(id: fallback_conv_id) if comment_id.blank?
+
+    conv = Conversation.where("custom_attributes->>'comment_id' = ?", comment_id).order(updated_at: :desc).first
+    return conv if conv
+
+    Conversation.find_by(id: fallback_conv_id)
+  end
 
   def mark_read!(conv)
     now = Time.current
