@@ -341,12 +341,6 @@ importers:
       prosemirror-model:
         specifier: ^1.22.3
         version: 1.22.3
-      prosemirror-state:
-        specifier: 1.4.3
-        version: 1.4.3
-      prosemirror-view:
-        specifier: 1.34.1
-        version: 1.34.1
       sass:
         specifier: ^1.99.0
         version: 1.99.0
