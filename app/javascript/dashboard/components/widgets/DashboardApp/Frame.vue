@@ -54,6 +54,27 @@ export default {
         }
       },
     },
+    'currentChat.id': {
+      handler(newId, oldId) {
+        if (newId !== oldId) {
+          this.config.forEach((configItem, index) => {
+            const frameElement = document.getElementById(
+              this.getFrameId(index)
+            );
+            if (frameElement && frameElement.contentWindow) {
+              const eventData = {
+                event: 'appContext',
+                data: this.dashboardAppContext,
+              };
+              frameElement.contentWindow.postMessage(
+                JSON.stringify(eventData),
+                '*'
+              );
+            }
+          });
+        }
+      },
+    },
   },
   mounted() {
     window.addEventListener('message', this.triggerEvent);
@@ -63,10 +84,7 @@ export default {
   },
   methods: {
     getFrameSrc(configItem) {
-      const url = configItem.url || '';
-      const sep = url.includes('?') ? '&' : '?';
-      const convId = this.currentChat?.id || '';
-      return `${url}${sep}cw_conv=${convId}&_t=${Date.now()}`;
+      return configItem.url || '';
     },
     triggerEvent(event) {
       if (!this.isVisible) return;
