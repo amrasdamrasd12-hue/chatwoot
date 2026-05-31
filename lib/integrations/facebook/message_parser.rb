@@ -19,7 +19,7 @@ class Integrations::Facebook::MessageParser
   end
 
   def content
-    @messaging.dig('message', 'text')
+    @messaging.dig('message', 'text') || template_title
   end
 
   def sequence
@@ -66,6 +66,16 @@ class Integrations::Facebook::MessageParser
 
   def in_reply_to_external_id
     @messaging.dig('message', 'reply_to', 'mid')
+  end
+
+  private
+
+  def template_title
+    template = (@messaging.dig('message', 'attachments') || []).find { |a| a['type'] == 'template' }
+    return nil unless template
+
+    payload = template.dig('payload') || {}
+    payload['title'] || payload.dig('elements', 0, 'title') || "[#{payload['template_type'] || 'template'}]"
   end
 end
 
