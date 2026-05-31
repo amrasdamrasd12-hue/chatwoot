@@ -57,6 +57,10 @@ const isFeatureEnabledonAccount = useMapGetter(
   'accounts/isFeatureEnabledonAccount'
 );
 
+// Backups expose full instance-wide DB dumps → only instance super-admins.
+const currentUser = useMapGetter('getCurrentUser');
+const isSuperAdmin = computed(() => currentUser.value?.type === 'SuperAdmin');
+
 const hasAdvancedAssignment = computed(() => {
   return isFeatureEnabledonAccount.value(
     accountId.value,
@@ -715,6 +719,16 @@ const menuItems = computed(() => {
           icon: 'i-lucide-spell-check',
           to: accountScopedRoute('spell_check_settings_index'),
         },
+        ...(isSuperAdmin.value
+          ? [
+              {
+                name: 'Settings Backups',
+                label: 'النسخ الاحتياطي',
+                icon: 'i-lucide-database',
+                to: accountScopedRoute('backup_settings_index'),
+              },
+            ]
+          : []),
         // {
         //   name: 'Settings Captain',
         //   label: t('SIDEBAR.CAPTAIN_AI'),

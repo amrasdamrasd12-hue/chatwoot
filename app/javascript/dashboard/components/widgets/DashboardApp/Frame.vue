@@ -62,6 +62,12 @@ export default {
     window.removeEventListener('message', this.triggerEvent);
   },
   methods: {
+    getFrameSrc(configItem) {
+      const url = configItem.url || '';
+      const sep = url.includes('?') ? '&' : '?';
+      const convId = this.currentChat?.id || '';
+      return `${url}${sep}cw_conv=${convId}&_t=${Date.now()}`;
+    },
     triggerEvent(event) {
       if (!this.isVisible) return;
       if (event.data === 'chatwoot-dashboard-app:fetch-info') {
@@ -100,7 +106,7 @@ export default {
       <iframe
         v-if="configItem.type === 'frame' && configItem.url"
         :id="getFrameId(index)"
-        :src="configItem.url"
+        :src="getFrameSrc(configItem)"
         @load="() => onIframeLoad(index)"
       />
     </div>

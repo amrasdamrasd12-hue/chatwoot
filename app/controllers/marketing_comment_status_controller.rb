@@ -1,5 +1,6 @@
 class MarketingCommentStatusController < ActionController::API
   include Events::Types
+  include FileTypeHelper
 
   # POST /_mkt/comments/:comment_id/mark_deleted[?conversation_id=NN]
   #
@@ -37,6 +38,66 @@ class MarketingCommentStatusController < ActionController::API
     mark_conversation_read!(conv)
 
     render json: { ok: true, found: true, conversation_id: conv.id, already_marked: already }
+  end
+
+  # POST /_mkt/comments/attach_media
+  #
+  # Creates a message with a downloaded ActiveStorage attachment (image/media)
+  # inside the specified conversation. This rehosts the file locally on our server,
+  # so it survives Facebook's CDN link expiration (signatures expire after ~2 days).
+  def attach_media
+    secret = request.headers['Authorization'].to_s.sub(/^Bearer /, '')
+    expected = ENV['MARKETING_RESOLVE_SECRET'].to_s
+    return render(json: { ok: false, error: 'unauthorized' }, status: :unauthorized) if expected.empty? || secret != expected
+
+    conv_id = params[:conversation_id]
+    content = params[:content]
+    image_url = params[:image_url]
+    message_type = params[:message_type] || 'incoming'
+
+    return render(json: { ok: false, error: 'missing_params' }, status: :bad_request) if conv_id.blank? || image_url.blank?
+
+    conv = Conversation.find_by(id: conv_id)
+    return render(json: { ok: false, error: 'conversation_not_found' }, status: :not_found) if conv.nil?
+
+    # Initialize message without saving it yet
+    msg = conv.messages.new(
+      account: conv.account,
+      inbox: conv.inbox,
+      message_type: message_type.to_sym,
+      content: content.presence
+    )
+
+    begin
+      # Download file from Facebook Graph API CDN using Down
+      file = Down.download(image_url)
+      
+      # Determine content-type and filename
+      content_type = file.content_type || 'image/png'
+      ext = content_type.split('/').last || 'png'
+      filename = file.original_filename || "attachment.#{ext}"
+
+      # Build attachment and attach file
+      att = msg.attachments.new(
+        account_id: conv.account_id,
+        file_type: file_type(content_type)
+      )
+      att.file.attach(io: file, filename: filename, content_type: content_type)
+
+      # Save message (saves attachments in the same transaction and dispatches events)
+      msg.save!
+    rescue => e
+      Rails.logger.error("[mkt-media] Failed to download or attach media: #{e.message}")
+      return render(json: { ok: false, error: "media_download_failed: #{e.message}" }, status: :unprocessable_entity)
+    ensure
+      # Down tempfile cleanup
+      if file
+        file.close
+        file.unlink if file.respond_to?(:unlink)
+      end
+    end
+
+    render json: { ok: true, message_id: msg.id }
   end
 
   private
