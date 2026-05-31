@@ -3,7 +3,7 @@ class SpellCheckEvent < ApplicationRecord
   # per spell-check API call; the modal callbacks finalise `decision`
   # so the reports page can break behaviour down per agent.
 
-  DECISIONS = %w[pending no_errors_send corrected sent_original edited unknown].freeze
+  DECISIONS = %w[pending no_errors_send corrected sent_original edited unknown draft].freeze
   SURFACES = %w[dm comments other].freeze
 
   belongs_to :account

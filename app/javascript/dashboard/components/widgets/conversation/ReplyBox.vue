@@ -950,6 +950,12 @@ export default {
             this.spellCheckCorrected = data.corrected || trimmed;
             this.spellCheckFixes = Array.isArray(data.fixes) ? data.fixes : [];
             this.spellCheckEventId = data.event_id || null;
+            if (this.spellCheckEventId) {
+              TasksAPI.spellCheckDecision(
+                this.spellCheckEventId,
+                'pending'
+              ).catch(() => {});
+            }
             this.showSpellCheckModal = true;
             return;
           }

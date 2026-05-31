@@ -347,10 +347,14 @@ const fmtDate = iso => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(hours)}:${pad(d.getMinutes())} ${ampm}`;
 };
 
-const convUrl = convId => {
+const convUrl = (convId, messageId) => {
   if (!convId) return null;
   const accountId = store.getters.getCurrentAccountId;
-  return `/app/accounts/${accountId}/conversations/${convId}`;
+  let url = `/app/accounts/${accountId}/conversations/${convId}`;
+  if (messageId) {
+    url += `?messageId=${messageId}`;
+  }
+  return url;
 };
 
 const csvCell = v => {
@@ -973,8 +977,12 @@ const exportCsv = () => {
                               </td>
                               <td class="px-3 py-2 text-center">
                                 <a
-                                  v-if="convUrl(c.conversation_id)"
-                                  :href="convUrl(c.conversation_id)"
+                                  v-if="
+                                    convUrl(c.conversation_id, c.message_id)
+                                  "
+                                  :href="
+                                    convUrl(c.conversation_id, c.message_id)
+                                  "
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   class="inline-flex items-center gap-1 rounded-md bg-n-brand/10 px-2 py-1 text-[10.5px] font-medium text-n-brand transition-colors hover:bg-n-brand/20"

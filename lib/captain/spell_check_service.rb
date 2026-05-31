@@ -252,7 +252,7 @@ class Captain::SpellCheckService < Captain::BaseTaskService
       errors_count: Array(result[:fixes]).size,
       original_length: content.to_s.length,
       corrected_length: result[:corrected].to_s.length,
-      decision: result[:has_errors] ? 'pending' : 'no_errors_send'
+      decision: result[:has_errors] ? 'draft' : 'no_errors_send'
     }
   end
 

@@ -13,7 +13,7 @@
 class Api::V1::Accounts::SpellCheckReportsController < Api::V1::Accounts::BaseController
   before_action :check_authorization
 
-  DECISIONS = SpellCheckEvent::DECISIONS - ['unknown']
+  DECISIONS = SpellCheckEvent::DECISIONS - %w[unknown draft]
   TOP_MISTAKES_LIMIT = 15
   AGENT_MISTAKES_LIMIT = 5
   CORRECTIONS_LIMIT = 500
@@ -43,13 +43,26 @@ class Api::V1::Accounts::SpellCheckReportsController < Api::V1::Accounts::BaseCo
     range_from, range_to = parsed_range
     uid = params[:user_id].to_i
 
+    # Subquery to find the closest message sent by the user in this conversation
+    # after the spell check event occurred.
+    message_subquery = <<-SQL.squish
+      SELECT id FROM messages
+      WHERE messages.conversation_id = spell_check_events.conversation_id
+      AND messages.user_id = spell_check_events.user_id
+      AND messages.created_at >= spell_check_events.created_at
+      ORDER BY messages.created_at ASC
+      LIMIT 1
+    SQL
+
     fixes = Current.account.spell_check_fixes
                    .where(user_id: uid, created_at: range_from..range_to)
                    .joins(:spell_check_event)
+                   .where.not(spell_check_events: { decision: 'draft' })
                    .select(
                      'spell_check_fixes.*',
                      'spell_check_events.decision AS event_decision',
-                     'spell_check_events.conversation_id AS event_conversation_id'
+                     'spell_check_events.conversation_id AS event_conversation_id',
+                     "(#{message_subquery}) AS target_message_id"
                    )
                    .order(created_at: :desc)
                    .limit(CORRECTIONS_LIMIT)
@@ -64,6 +77,7 @@ class Api::V1::Accounts::SpellCheckReportsController < Api::V1::Accounts::BaseCo
           category: f.category,
           decision: f.event_decision,
           conversation_id: f.event_conversation_id,
+          message_id: f.target_message_id,
           created_at: f.created_at.iso8601
         }
       end
@@ -75,6 +89,13 @@ class Api::V1::Accounts::SpellCheckReportsController < Api::V1::Accounts::BaseCo
   def scoped(relation, from, to)
     relation = relation.where(created_at: from..to)
     relation = relation.where(user_id: params[:user_ids]) if params[:user_ids].present?
+
+    if relation.klass == SpellCheckEvent
+      relation = relation.where.not(decision: 'draft')
+    elsif relation.klass == SpellCheckFix
+      relation = relation.joins(:spell_check_event).where.not(spell_check_events: { decision: 'draft' })
+    end
+
     relation
   end
 
