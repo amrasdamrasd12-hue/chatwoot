@@ -6,7 +6,7 @@ module Llm::Config
   # uses this Gemini model (covered by the Google AI Ultra $100/mo Cloud
   # credit). OpenAI stays as a fallback — flip CAPTAIN_LLM_PROVIDER to
   # 'openai' to switch back instantly.
-  VERTEX_MODEL = 'gemini-2.5-flash'.freeze
+  VERTEX_MODEL = 'gemini-2.5-flash-lite'.freeze
 
   class << self
     def initialized?
