@@ -16,6 +16,7 @@ class Api::V1::Accounts::SpellCheckReportsController < Api::V1::Accounts::BaseCo
   DECISIONS = SpellCheckEvent::DECISIONS - ['unknown']
   TOP_MISTAKES_LIMIT = 15
   AGENT_MISTAKES_LIMIT = 5
+  CORRECTIONS_LIMIT = 500
 
   def index
     range_from, range_to = parsed_range
@@ -34,6 +35,38 @@ class Api::V1::Accounts::SpellCheckReportsController < Api::V1::Accounts::BaseCo
       by_agent: agent_breakdown(events, fixes),
       by_day: daily_series(events, range_from, range_to),
       top_mistakes: top_mistakes(fixes)
+    }
+  end
+
+  # Full per-fix list for a single agent — no aggregation, every row.
+  def corrections
+    range_from, range_to = parsed_range
+    uid = params[:user_id].to_i
+
+    fixes = Current.account.spell_check_fixes
+                   .where(user_id: uid, created_at: range_from..range_to)
+                   .joins(:spell_check_event)
+                   .select(
+                     'spell_check_fixes.*',
+                     'spell_check_events.decision AS event_decision',
+                     'spell_check_events.conversation_id AS event_conversation_id'
+                   )
+                   .order(created_at: :desc)
+                   .limit(CORRECTIONS_LIMIT)
+
+    render json: {
+      user_id: uid,
+      total: fixes.size,
+      corrections: fixes.map do |f|
+        {
+          wrong: f.wrong,
+          right: f.right,
+          category: f.category,
+          decision: f.event_decision,
+          conversation_id: f.event_conversation_id,
+          created_at: f.created_at.iso8601
+        }
+      end
     }
   end
 

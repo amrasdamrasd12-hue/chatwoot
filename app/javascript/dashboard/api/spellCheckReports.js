@@ -16,6 +16,13 @@ class SpellCheckReports extends ApiClient {
     if (userIds && userIds.length) params.user_ids = userIds;
     return axios.get(this.url, { params });
   }
+
+  fetchCorrections({ since, until, userId }) {
+    const params = { user_id: userId };
+    if (since) params.since = since;
+    if (until) params.until = until;
+    return axios.get(`${this.url}/corrections`, { params });
+  }
 }
 
 export default new SpellCheckReports();

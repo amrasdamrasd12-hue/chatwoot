@@ -109,9 +109,11 @@ Rails.application.routes.draw do
           # Eltafouk: per-account configuration for the pre-send spell-check
           # guard (DM toggle, comments toggle, 6-level strictness).
           resource :spell_check_settings, only: [:show, :update]
-          resources :backups, only: [:index, :create, :show, :destroy, :update], constraints: { id: /[^\/]+/ }
+          resources :backups, only: [:index, :create, :show, :destroy, :update], constraints: { id: %r{[^/]+} }
           # Eltafouk: aggregated per-agent spell-check audit reports.
-          resources :spell_check_reports, only: [:index]
+          resources :spell_check_reports, only: [:index] do
+            get :corrections, on: :collection
+          end
           # Eltafouk: per-agent activity report (DM + comment replies,
           # channels, detected shift, in-shift response time).
           resources :agent_activity_reports, only: [:index]

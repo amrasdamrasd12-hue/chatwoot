@@ -50,6 +50,18 @@ const L = {
   LEGEND_EDITED: 'رجع للتعديل',
   TIMES: 'مرة',
   TZ_NOTE: 'بتوقيت القاهرة',
+  CORR_TITLE: 'جدول التصحيحات الكامل',
+  CORR_WRONG: 'الخطأ',
+  CORR_RIGHT: 'التصحيح',
+  CORR_DECISION: 'القرار',
+  CORR_CATEGORY: 'النوع',
+  CORR_DATE: 'التاريخ',
+  CORR_CONV: 'المحادثة',
+  CORR_LOADING: 'جاري تحميل التصحيحات…',
+  CORR_ACCEPTED: 'قبل',
+  CORR_REJECTED: 'رفض',
+  CORR_EDITED: 'عدّل',
+  CORR_NOERR: 'بدون خطأ',
 };
 
 // Stable category keys ←→ Arabic label + chip colours. Full literal
@@ -127,6 +139,8 @@ const report = ref(null);
 const loading = ref(false);
 const error = ref(null);
 const expanded = ref(new Set());
+const agentCorrections = ref({});
+const correctionsLoading = ref({});
 
 const allAgents = computed(() => store.getters['agents/getAgents'] || []);
 
@@ -168,6 +182,8 @@ const fetchReport = async () => {
   loading.value = true;
   error.value = null;
   expanded.value = new Set();
+  agentCorrections.value = {};
+  correctionsLoading.value = {};
   try {
     const { data } = await SpellCheckReportsAPI.fetch(rangeIso.value);
     report.value = data;
@@ -259,12 +275,73 @@ const applyCustom = () => {
 
 const agentKey = a => a.user_id || 'na';
 const isExpanded = a => expanded.value.has(agentKey(a));
-const toggleAgent = a => {
+const toggleAgent = async a => {
   const key = agentKey(a);
   const next = new Set(expanded.value);
-  if (next.has(key)) next.delete(key);
-  else next.add(key);
+  if (next.has(key)) {
+    next.delete(key);
+  } else {
+    next.add(key);
+    // Lazy-fetch corrections if not loaded yet
+    if (!agentCorrections.value[key] && a.user_id) {
+      correctionsLoading.value = { ...correctionsLoading.value, [key]: true };
+      try {
+        const { data } = await SpellCheckReportsAPI.fetchCorrections({
+          ...rangeIso.value,
+          userId: a.user_id,
+        });
+        agentCorrections.value = {
+          ...agentCorrections.value,
+          [key]: data.corrections || [],
+        };
+      } catch (e) {
+        agentCorrections.value = { ...agentCorrections.value, [key]: [] };
+      } finally {
+        correctionsLoading.value = {
+          ...correctionsLoading.value,
+          [key]: false,
+        };
+      }
+    }
+  }
   expanded.value = next;
+};
+
+const DECISION_META = {
+  corrected: {
+    label: L.CORR_ACCEPTED,
+    icon: 'i-lucide-check',
+    cls: 'text-n-teal-11',
+  },
+  sent_original: {
+    label: L.CORR_REJECTED,
+    icon: 'i-lucide-x',
+    cls: 'text-n-ruby-11',
+  },
+  edited: {
+    label: L.CORR_EDITED,
+    icon: 'i-lucide-pencil',
+    cls: 'text-n-amber-11',
+  },
+  no_errors_send: {
+    label: L.CORR_NOERR,
+    icon: 'i-lucide-minus',
+    cls: 'text-n-slate-10',
+  },
+};
+const decisionMeta = d => DECISION_META[d] || DECISION_META.no_errors_send;
+
+const fmtDate = iso => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+const convUrl = convId => {
+  if (!convId) return null;
+  const accountId = store.getters['auth/getCurrentAccountId'];
+  return `/app/accounts/${accountId}/conversations/${convId}`;
 };
 
 const csvCell = v => {
@@ -760,6 +837,148 @@ const exportCsv = () => {
                         {{ L.NO_MISTAKES }}
                       </p>
                     </div>
+                  </div>
+
+                  <!-- Full corrections table -->
+                  <div class="mt-5">
+                    <p
+                      class="mb-3 text-[11px] font-bold uppercase tracking-wider text-n-slate-11"
+                    >
+                      {{ L.CORR_TITLE }}
+                      <span
+                        v-if="agentCorrections[agentKey(agent)]"
+                        class="ms-1 font-bold tabular-nums text-n-brand"
+                      >
+                        ({{ agentCorrections[agentKey(agent)].length }})
+                      </span>
+                    </p>
+
+                    <div
+                      v-if="correctionsLoading[agentKey(agent)]"
+                      class="py-4 text-center text-[12px] text-n-slate-11"
+                    >
+                      {{ L.CORR_LOADING }}
+                    </div>
+
+                    <div
+                      v-else-if="
+                        agentCorrections[agentKey(agent)] &&
+                        agentCorrections[agentKey(agent)].length
+                      "
+                      class="overflow-hidden rounded-lg border border-n-weak"
+                    >
+                      <div class="max-h-[400px] overflow-y-auto">
+                        <table class="w-full text-[12.5px]">
+                          <thead class="sticky top-0 z-10 bg-n-solid-2">
+                            <tr
+                              class="border-b border-n-weak text-[10px] uppercase tracking-wider text-n-slate-11"
+                            >
+                              <th class="px-3 py-2 text-right font-semibold">
+                                {{ L.CORR_WRONG }}
+                              </th>
+                              <th class="w-6" />
+                              <th class="px-3 py-2 text-right font-semibold">
+                                {{ L.CORR_RIGHT }}
+                              </th>
+                              <th class="px-3 py-2 text-center font-semibold">
+                                {{ L.CORR_DECISION }}
+                              </th>
+                              <th class="px-3 py-2 text-center font-semibold">
+                                {{ L.CORR_CATEGORY }}
+                              </th>
+                              <th
+                                class="px-3 py-2 text-center font-semibold"
+                                dir="ltr"
+                              >
+                                {{ L.CORR_DATE }}
+                              </th>
+                              <th class="px-3 py-2 text-center font-semibold">
+                                {{ L.CORR_CONV }}
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr
+                              v-for="(c, ci) in agentCorrections[
+                                agentKey(agent)
+                              ]"
+                              :key="ci"
+                              class="border-b border-n-weak/40 hover:bg-n-alpha-1"
+                            >
+                              <td class="px-3 py-2">
+                                <span
+                                  class="rounded bg-n-ruby-3 px-1.5 py-0.5 font-semibold text-n-ruby-12"
+                                  >{{ c.wrong }}</span
+                                >
+                              </td>
+                              <td class="px-1 text-center">
+                                <span
+                                  class="i-lucide-arrow-left size-3 text-n-slate-9"
+                                />
+                              </td>
+                              <td class="px-3 py-2">
+                                <span
+                                  class="rounded bg-n-teal-3 px-1.5 py-0.5 font-semibold text-n-teal-12"
+                                  >{{ c.right }}</span
+                                >
+                              </td>
+                              <td class="px-3 py-2 text-center">
+                                <span
+                                  class="inline-flex items-center gap-1 text-[11px] font-medium"
+                                  :class="decisionMeta(c.decision).cls"
+                                >
+                                  <span
+                                    :class="decisionMeta(c.decision).icon"
+                                    class="size-3.5"
+                                  />
+                                  {{ decisionMeta(c.decision).label }}
+                                </span>
+                              </td>
+                              <td class="px-3 py-2 text-center">
+                                <span
+                                  class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium"
+                                  :class="categoryChip(c.category)"
+                                >
+                                  <span
+                                    class="size-1.5 rounded-full"
+                                    :class="categoryDot(c.category)"
+                                  />
+                                  {{ categoryLabel(c.category) }}
+                                </span>
+                              </td>
+                              <td
+                                class="px-3 py-2 text-center text-[11px] tabular-nums text-n-slate-10"
+                                dir="ltr"
+                              >
+                                {{ fmtDate(c.created_at) }}
+                              </td>
+                              <td class="px-3 py-2 text-center">
+                                <a
+                                  v-if="convUrl(c.conversation_id)"
+                                  :href="convUrl(c.conversation_id)"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  class="inline-flex items-center gap-1 rounded-md bg-n-brand/10 px-2 py-1 text-[10.5px] font-medium text-n-brand transition-colors hover:bg-n-brand/20"
+                                >
+                                  <span class="i-lucide-external-link size-3" />
+                                  {{ `#${c.conversation_id}` }}
+                                </a>
+                                <span v-else class="text-[10px] text-n-slate-9">
+                                  {{ '—' }}
+                                </span>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <p
+                      v-else-if="agentCorrections[agentKey(agent)]"
+                      class="text-[12px] text-n-slate-10"
+                    >
+                      {{ L.NO_MISTAKES }}
+                    </p>
                   </div>
                 </td>
               </tr>
