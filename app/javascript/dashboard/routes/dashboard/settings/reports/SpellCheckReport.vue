@@ -323,24 +323,33 @@ const DECISION_META = {
     icon: 'i-lucide-pencil',
     cls: 'text-n-amber-11',
   },
+  pending: {
+    label: 'تجاهل',
+    icon: 'i-lucide-skip-forward',
+    cls: 'text-n-slate-11',
+  },
   no_errors_send: {
     label: L.CORR_NOERR,
     icon: 'i-lucide-minus',
     cls: 'text-n-slate-10',
   },
 };
-const decisionMeta = d => DECISION_META[d] || DECISION_META.no_errors_send;
+const decisionMeta = d => DECISION_META[d] || DECISION_META.pending;
 
 const fmtDate = iso => {
   if (!iso) return '';
   const d = new Date(iso);
   const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  let hours = d.getHours();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours %= 12;
+  hours = hours || 12;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(hours)}:${pad(d.getMinutes())} ${ampm}`;
 };
 
 const convUrl = convId => {
   if (!convId) return null;
-  const accountId = store.getters['auth/getCurrentAccountId'];
+  const accountId = store.getters.getCurrentAccountId;
   return `/app/accounts/${accountId}/conversations/${convId}`;
 };
 
@@ -873,6 +882,11 @@ const exportCsv = () => {
                             <tr
                               class="border-b border-n-weak text-[10px] uppercase tracking-wider text-n-slate-11"
                             >
+                              <th
+                                class="px-3 py-2 text-center font-semibold w-8"
+                              >
+                                #
+                              </th>
                               <th class="px-3 py-2 text-right font-semibold">
                                 {{ L.CORR_WRONG }}
                               </th>
@@ -905,6 +919,11 @@ const exportCsv = () => {
                               :key="ci"
                               class="border-b border-n-weak/40 hover:bg-n-alpha-1"
                             >
+                              <td
+                                class="px-3 py-2 text-center tabular-nums text-n-slate-10 font-medium"
+                              >
+                                {{ ci + 1 }}
+                              </td>
                               <td class="px-3 py-2">
                                 <span
                                   class="rounded bg-n-ruby-3 px-1.5 py-0.5 font-semibold text-n-ruby-12"
