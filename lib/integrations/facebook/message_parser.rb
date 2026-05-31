@@ -74,8 +74,8 @@ class Integrations::Facebook::MessageParser
     template = (@messaging.dig('message', 'attachments') || []).find { |a| a['type'] == 'template' }
     return nil unless template
 
-    payload = template.dig('payload') || {}
-    payload['title'] || payload.dig('elements', 0, 'title') || "[#{payload['template_type'] || 'template'}]"
+    payload = template['payload'] || {}
+    payload['title'] || payload.dig('elements', 0, 'title') || "[#{payload.fetch('template_type', 'template')}]"
   end
 end
 
