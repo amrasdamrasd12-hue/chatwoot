@@ -18,7 +18,7 @@ module Captain::SpellCheckLevelFilter
     'tanween' => 4, 'diacritic' => 5, 'punctuation' => 6
   }.freeze
 
-  HAMZA_FORMS = /[أإآٱ]/
+  HAMZA_FORMS = /[أإآٱءؤئ]/
   TANWEEN_MARKS = /[ً-ٍ]/
   DIACRITIC_MARKS = /[َ-ْٰ]/ # harakat + shadda + sukun + superscript alef (no tanween)
 
@@ -79,7 +79,22 @@ module Captain::SpellCheckLevelFilter
   end
 
   def rebuild(original, fixes)
-    fixes.reduce(original) { |text, fix| text.sub(fix[:wrong].to_s, fix[:right].to_s) }
+    result = original
+    fixes.each do |fix|
+      wrong = fix[:wrong].to_s
+      right = fix[:right].to_s
+
+      # Token-based replacement: split on whitespace, preserve it, match exact tokens
+      tokens = result.split(/(\s+)/)
+      tokens.each_with_index do |token, i|
+        if token == wrong
+          tokens[i] = right
+          break  # Replace only the first exact match (word-boundary aware)
+        end
+      end
+      result = tokens.join('')
+    end
+    result
   end
 
   def clean(original)

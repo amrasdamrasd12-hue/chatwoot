@@ -106,6 +106,9 @@ class Api::V1::Accounts::Captain::TasksController < Api::V1::Accounts::BaseContr
     # cross-account writes even though the policy already gates the
     # controller.
     return head :ok if event.user_id.present? && event.user_id != Current.user&.id
+    # Only allow decision updates for events in draft/pending state
+    # Once a final decision is recorded, prevent overwriting
+    return head :ok unless %w[draft no_errors_send].include?(event.decision)
 
     decision = params[:decision].to_s
     decision = 'unknown' unless SpellCheckEvent::DECISIONS.include?(decision)

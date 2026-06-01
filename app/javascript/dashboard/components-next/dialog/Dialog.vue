@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, provide } from 'vue';
+import { ref, computed, provide, nextTick, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import Button from 'dashboard/components-next/button/Button.vue';
@@ -73,6 +73,18 @@ const props = defineProps({
     default: 'center',
     validator: value => ['center', 'top'].includes(value),
   },
+  closeOnBackdropClick: {
+    type: Boolean,
+    default: true,
+  },
+  ariaLabelledById: {
+    type: String,
+    default: '',
+  },
+  ariaDescribedById: {
+    type: String,
+    default: '',
+  },
 });
 
 const emit = defineEmits(['confirm', 'close']);
@@ -82,6 +94,7 @@ const { t } = useI18n();
 const dialogRef = ref(null);
 const dialogContentRef = ref(null);
 const isOpen = ref(false);
+const previousFocusedElement = ref(null);
 
 const maxWidthClass = computed(() => {
   const classesMap = {
@@ -104,11 +117,18 @@ const positionClass = computed(() =>
   props.position === 'top' ? 'dialog-position-top' : ''
 );
 
-const open = () => {
+const open = async () => {
   if (isOpen.value) return;
 
+  previousFocusedElement.value = document.activeElement;
   isOpen.value = true;
+  document.documentElement.style.overflow = 'hidden';
+
   dialogRef.value?.showModal();
+  await nextTick();
+
+  // Focus the dialog's form for keyboard navigation
+  dialogContentRef.value?.focus();
 };
 
 const close = () => {
@@ -116,6 +136,13 @@ const close = () => {
 
   isOpen.value = false;
   dialogRef.value?.close();
+  document.documentElement.style.overflow = '';
+
+  // Restore focus to the element that triggered the dialog
+  nextTick(() => {
+    previousFocusedElement.value?.focus?.();
+  });
+
   emit('close');
 };
 
@@ -123,6 +150,10 @@ const handleNativeClose = () => {
   if (!isOpen.value) return;
 
   isOpen.value = false;
+  document.documentElement.style.overflow = '';
+  nextTick(() => {
+    previousFocusedElement.value?.focus?.();
+  });
   emit('close');
 };
 
@@ -131,8 +162,14 @@ const confirm = () => {
 };
 
 const handleBackdropClick = e => {
-  if (e.target === dialogRef.value) close();
+  if (e.target === dialogRef.value && props.closeOnBackdropClick) close();
 };
+
+onBeforeUnmount(() => {
+  if (isOpen.value) {
+    document.documentElement.style.overflow = '';
+  }
+});
 
 provide('dialogRef', dialogRef);
 
@@ -151,6 +188,8 @@ defineExpose({ open, close });
           ? 'overflow-y-auto max-h-[90vh]'
           : 'overflow-visible',
       ]"
+      :aria-labelledby="ariaLabelledById"
+      :aria-describedby="ariaDescribedById"
       @close="handleNativeClose"
       @click="handleBackdropClick"
     >
@@ -169,11 +208,18 @@ defineExpose({ open, close });
         <template v-if="overflowYAuto && stickyFooter">
           <div class="flex-1 min-h-0 overflow-y-auto flex flex-col gap-6 p-6">
             <div v-if="title || description" class="flex flex-col gap-2">
-              <h3 class="text-base font-medium leading-6 text-n-slate-12">
+              <h3
+                id="dialog-title"
+                class="text-base font-medium leading-6 text-n-slate-12"
+              >
                 {{ title }}
               </h3>
               <slot name="description">
-                <p v-if="description" class="mb-0 text-sm text-n-slate-11">
+                <p
+                  v-if="description"
+                  id="dialog-description"
+                  class="mb-0 text-sm text-n-slate-11"
+                >
                   {{ description }}
                 </p>
               </slot>
@@ -212,11 +258,18 @@ defineExpose({ open, close });
         <!-- Normal layout -->
         <template v-else>
           <div v-if="title || description" class="flex flex-col gap-2">
-            <h3 class="text-base font-medium leading-6 text-n-slate-12">
+            <h3
+              id="dialog-title"
+              class="text-base font-medium leading-6 text-n-slate-12"
+            >
               {{ title }}
             </h3>
             <slot name="description">
-              <p v-if="description" class="mb-0 text-sm text-n-slate-11">
+              <p
+                v-if="description"
+                id="dialog-description"
+                class="mb-0 text-sm text-n-slate-11"
+              >
                 {{ description }}
               </p>
             </slot>
