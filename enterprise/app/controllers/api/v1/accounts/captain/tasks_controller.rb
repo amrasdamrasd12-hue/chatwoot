@@ -1,6 +1,10 @@
 class Api::V1::Accounts::Captain::TasksController < Api::V1::Accounts::BaseController
   before_action :check_authorization
 
+  # Decisions that represent a finalised modal choice — once recorded, a stray
+  # late 'pending' write (e.g. a re-opened modal) must not overwrite them.
+  FINAL_DECISIONS = %w[corrected sent_original edited].freeze
+
   def rewrite
     result = Captain::RewriteService.new(
       account: Current.account,
@@ -101,22 +105,33 @@ class Api::V1::Accounts::Captain::TasksController < Api::V1::Accounts::BaseContr
   # write never delays the actual customer reply.
   def spell_check_decision
     event = Current.account.spell_check_events.find_by(id: params[:event_id])
-    return head :ok unless event
-    # The event was created for this agent's session — block accidental
-    # cross-account writes even though the policy already gates the
-    # controller.
-    return head :ok if event.user_id.present? && event.user_id != Current.user&.id
-    # Only allow decision updates for events in draft/pending state
-    # Once a final decision is recorded, prevent overwriting
-    return head :ok unless %w[draft no_errors_send].include?(event.decision)
+    # Block missing events and accidental cross-account writes (the policy
+    # already gates the controller; this guards the per-agent session row).
+    return head :ok unless event && event_writable_by_current_user?(event)
 
-    decision = params[:decision].to_s
-    decision = 'unknown' unless SpellCheckEvent::DECISIONS.include?(decision)
-    event.update(decision: decision)
+    decision = normalized_decision
+    # A final decision (corrected/sent_original/edited) must always persist —
+    # the modal PATCHes 'pending' on open, so by the time the agent picks a
+    # final decision the event already holds 'pending'. Only block the reverse:
+    # a stray late 'pending' must not clobber an already-final decision.
+    event.update(decision: decision) unless clobbers_final_decision?(event, decision)
     head :ok
   end
 
   private
+
+  def event_writable_by_current_user?(event)
+    event.user_id.blank? || event.user_id == Current.user&.id
+  end
+
+  def normalized_decision
+    decision = params[:decision].to_s
+    SpellCheckEvent::DECISIONS.include?(decision) ? decision : 'unknown'
+  end
+
+  def clobbers_final_decision?(event, decision)
+    decision == 'pending' && FINAL_DECISIONS.include?(event.decision)
+  end
 
   def surface_disabled?(surface)
     settings = Current.account.spell_check_settings.to_h.stringify_keys
