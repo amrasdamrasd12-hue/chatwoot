@@ -10,6 +10,10 @@ module Captain::SpellCheckCategorizer
   TASHKEEL_RE = /[ً-ْٰ]/ # harakat + tanween + shadda + sukun + superscript alef
   TANWEEN_RE = /[ً-ٍ]/ # ً ٍ ٌ
   TATWEEL = 'ـ'.freeze
+  # Arabic + Latin punctuation/quotes/brackets — mirrors the Vue layer's
+  # ARABIC_PUNCT_RE so a comma/question-mark-only change buckets the same
+  # way on both sides of the wire.
+  PUNCT_RE = /[،؛؟.,!?"'“”‘’«»…:()\[\]{}]+/
 
   # Returns the first matching bucket — a fix that is both hamza+letter is
   # rare and lands on its dominant difference.
@@ -22,6 +26,10 @@ module Captain::SpellCheckCategorizer
     r_bare = strip_tashkeel(r)
     # Letters identical once diacritics/tatweel are stripped → mark diff.
     return mark_category(w, r) if w_bare == r_bare
+    # Only the punctuation differs (cores identical with punctuation removed,
+    # but they weren't equal above) → a pure punctuation fix. Checked before
+    # letter_category so it can't be mislabelled a level-1 letter change.
+    return 'punctuation' if w_bare.gsub(PUNCT_RE, '') == r_bare.gsub(PUNCT_RE, '')
 
     letter_category(w_bare, r_bare)
   end
@@ -55,6 +63,15 @@ module Captain::SpellCheckCategorizer
 
   def strip_tashkeel(str)
     str.gsub(TASHKEEL_RE, '').delete(TATWEEL)
+  end
+
+  # The word's core letters with every guarded hamza distinction folded
+  # away: combining marks/tatweel stripped, the hamza letter-family mapped
+  # to its bare carrier (أإآٱ→ا, ؤ→و, ئ→ي) and the standalone hamza ء
+  # dropped. Used by the filter's downgrade? to tell a pure mark/hamza-strip
+  # (cores equal) from a real letter fix (cores differ). module_function.
+  def bare_letters(str)
+    strip_tashkeel(str.to_s.strip).tr('أإآٱؤئ', 'ااااوي').delete('ء')
   end
 
   def normalize_hamza(str)

@@ -20,7 +20,10 @@ module Captain::SpellCheckLevelFilter
 
   HAMZA_FORMS = /[أإآٱءؤئ]/
   TANWEEN_MARKS = /[ً-ٍ]/
-  DIACRITIC_MARKS = /[َ-ْٰ]/ # harakat + shadda + sukun + superscript alef (no tanween)
+  # harakat + shadda + sukun + combining maddah/hamza-above/hamza-below
+  # (U+0653-0655) + superscript alef. Range stops below TANWEEN_MARKS
+  # (U+064B-064D) so the two never overlap.
+  DIACRITIC_MARKS = /[َ-ٰٕ]/
 
   # Drop fixes the model invented (wrong word absent from the original) or
   # that this level forbids, then rebuild the corrected string from only
@@ -33,7 +36,20 @@ module Captain::SpellCheckLevelFilter
     kept = Array(result[:fixes]).filter_map { |fix| keep(fix, level, original) }
     return clean(original) if kept.empty?
 
-    { has_errors: true, original: original, corrected: rebuild(original, kept), fixes: kept }
+    corrected = rebuild(original, kept)
+    # Every surviving fix was unappliable (e.g. wrong matched only via
+    # substring but never as a token core), so rebuild changed nothing.
+    # Collapse to no-errors instead of opening a no-op modal that would ship
+    # the uncorrected text and log a phantom fix.
+    return clean(original) if normalize_ws(corrected) == normalize_ws(original)
+
+    { has_errors: true, original: original, corrected: corrected, fixes: kept }
+  end
+
+  # Tiny whitespace normalizer mirroring the service's normalize, kept local
+  # so the filter stays a self-contained pure function.
+  def normalize_ws(text)
+    text.to_s.gsub(/\s+/, ' ').strip
   end
 
   # Returns the (possibly sanitised) fix to keep, or nil to drop it.
@@ -68,8 +84,15 @@ module Captain::SpellCheckLevelFilter
     text
   end
 
-  # True when the "fix" removes a hamza or tanween the original had.
+  # True only when the fix's ESSENTIAL change is stripping a correct
+  # hamza/tanween — i.e. the bare letters are unchanged and the sole effect
+  # is fewer marks. A genuine letter fix (مكتبه→مكتبة, كميا→كيميا) often
+  # incidentally drops a stray mark; we must NOT block those even at max
+  # strictness, only pure mark-strips of an otherwise-correct word.
   def downgrade?(wrong, right)
+    return false unless Captain::SpellCheckCategorizer.bare_letters(wrong) ==
+                        Captain::SpellCheckCategorizer.bare_letters(right)
+
     mark_count(right, HAMZA_FORMS) < mark_count(wrong, HAMZA_FORMS) ||
       mark_count(right, TANWEEN_MARKS) < mark_count(wrong, TANWEEN_MARKS)
   end
@@ -78,19 +101,32 @@ module Captain::SpellCheckLevelFilter
     str.to_s.scan(regex).size
   end
 
+  # Arabic + Latin punctuation/quotes/brackets glued to a token. Mirrors the
+  # Vue layer's ARABIC_PUNCT_RE so "كمياء." / "اهلا،" match a fix whose wrong
+  # is the bare word. Anchored to the ends so we only peel surrounding
+  # punctuation, never punctuation embedded mid-word.
+  EDGE_PUNCT = /\A(?<lead>[،؛؟.,!?"'“”‘’«»…:()\[\]{}]*)(?<core>.*?)(?<trail>[،؛؟.,!?"'“”‘’«»…:()\[\]{}]*)\z/m
+
   def rebuild(original, fixes)
     result = original
     fixes.each do |fix|
       wrong = fix[:wrong].to_s
       right = fix[:right].to_s
 
-      # Token-based replacement: split on whitespace, preserve it, match exact tokens
+      # Whitespace-preserving token replace, fixing EVERY occurrence so a
+      # repeated typo can't survive. A token matches if it equals wrong
+      # verbatim (covers fixes whose wrong carries its own punctuation, e.g.
+      # a punctuation fix اهلا،→اهلا؟) OR if its core — punctuation peeled
+      # off both ends — equals wrong (covers a bare wrong glued to stray
+      # punctuation in the text, e.g. كمياء. → keep the trailing period).
       tokens = result.split(/(\s+)/)
       tokens.each_with_index do |token, i|
         if token == wrong
           tokens[i] = right
-          break  # Replace only the first exact match (word-boundary aware)
+          next
         end
+        m = token.match(EDGE_PUNCT)
+        tokens[i] = "#{m[:lead]}#{right}#{m[:trail]}" if m && m[:core] == wrong
       end
       result = tokens.join
     end
