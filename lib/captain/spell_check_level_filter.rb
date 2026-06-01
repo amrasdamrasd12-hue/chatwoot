@@ -92,7 +92,7 @@ module Captain::SpellCheckLevelFilter
           break  # Replace only the first exact match (word-boundary aware)
         end
       end
-      result = tokens.join('')
+      result = tokens.join
     end
     result
   end
