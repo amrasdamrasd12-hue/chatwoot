@@ -13,7 +13,11 @@
 class Api::V1::Accounts::SpellCheckReportsController < Api::V1::Accounts::BaseController
   before_action :check_authorization
 
-  DECISIONS = SpellCheckEvent::DECISIONS - %w[unknown draft]
+  # Only finalised outcomes are meaningful for the headline metrics. We drop
+  # `draft`/`pending` (the agent never resolved the modal) and `unknown` (a
+  # finalise call with an unrecognised value) so totals, the per-decision
+  # breakdown and the error counts are all measured over the same rows.
+  DECISIONS = SpellCheckEvent::DECISIONS - %w[unknown draft pending]
   TOP_MISTAKES_LIMIT = 15
   AGENT_MISTAKES_LIMIT = 5
   CORRECTIONS_LIMIT = 500
@@ -55,22 +59,26 @@ class Api::V1::Accounts::SpellCheckReportsController < Api::V1::Accounts::BaseCo
       LIMIT 1
     SQL
 
-    fixes = Current.account.spell_check_fixes
-                   .where(user_id: uid, created_at: range_from..range_to)
-                   .joins(:spell_check_event)
-                   .where.not(spell_check_events: { decision: 'draft' })
-                   .select(
-                     'spell_check_fixes.*',
-                     'spell_check_events.decision AS event_decision',
-                     'spell_check_events.conversation_id AS event_conversation_id',
-                     "(#{message_subquery}) AS target_message_id"
-                   )
-                   .order(created_at: :desc)
-                   .limit(CORRECTIONS_LIMIT)
+    base = Current.account.spell_check_fixes
+                  .where(user_id: uid, created_at: range_from..range_to)
+                  .joins(:spell_check_event)
+                  .where(spell_check_events: { decision: DECISIONS })
+
+    # True count (un-limited) so the table can show the real total and flag
+    # that the returned rows are truncated, while the row LIMIT still caps
+    # the payload size.
+    total = base.unscope(:order).count
+    fixes = base.select(
+      'spell_check_fixes.*',
+      'spell_check_events.decision AS event_decision',
+      'spell_check_events.conversation_id AS event_conversation_id',
+      "(#{message_subquery}) AS target_message_id"
+    ).order(created_at: :desc).limit(CORRECTIONS_LIMIT)
 
     render json: {
       user_id: uid,
-      total: fixes.size,
+      total: total,
+      truncated: total > CORRECTIONS_LIMIT,
       corrections: fixes.map do |f|
         {
           wrong: f.wrong,
@@ -87,26 +95,34 @@ class Api::V1::Accounts::SpellCheckReportsController < Api::V1::Accounts::BaseCo
 
   private
 
+  # Restrict every aggregation to finalised events (DECISIONS) so the
+  # headline total, per-decision breakdown and error counts stay consistent.
   def scoped(relation, from, to)
     relation = relation.where(created_at: from..to)
     relation = relation.where(user_id: params[:user_ids]) if params[:user_ids].present?
 
     if relation.klass == SpellCheckEvent
-      relation = relation.where.not(decision: 'draft')
+      relation = relation.where(decision: DECISIONS)
     elsif relation.klass == SpellCheckFix
-      relation = relation.joins(:spell_check_event).where.not(spell_check_events: { decision: 'draft' })
+      relation = relation.joins(:spell_check_event).where(spell_check_events: { decision: DECISIONS })
     end
 
     relation
   end
 
-  # Range parsing — default to last 30 days when no params given.
+  # Range parsing — default to last 30 days. A malformed `since`/`until`
+  # (Time.zone.parse raises ArgumentError, or returns nil for blank-ish junk)
+  # falls back to the default bound instead of 500-ing the whole report.
   def parsed_range
-    to_param = params[:until].presence
-    from_param = params[:since].presence
-    to = to_param ? Time.zone.parse(to_param) : Time.current
-    from = from_param ? Time.zone.parse(from_param) : (to - 30.days)
+    to = safe_parse(params[:until]) || Time.current
+    from = safe_parse(params[:since]) || (to - 30.days)
     [from.beginning_of_day, to.end_of_day]
+  end
+
+  def safe_parse(value)
+    value.present? ? Time.zone.parse(value) : nil
+  rescue ArgumentError
+    nil
   end
 
   def summary_for(scope)
@@ -237,7 +253,11 @@ class Api::V1::Accounts::SpellCheckReportsController < Api::V1::Accounts::BaseCo
     days.values.sort_by { |d| d[:date] }
   end
 
+  # Per-agent spell-check audit data is admin-only. Mirror the account
+  # reports controller (`authorize :report, :view?` → ReportPolicy#view?,
+  # which requires `account_user.administrator?`) so agents can't read
+  # each other's stats; account scoping via Current.account still applies.
   def check_authorization
-    authorize(Account, :show?)
+    authorize :report, :view?
   end
 end
