@@ -173,7 +173,14 @@ onBeforeUnmount(() => {
 
 provide('dialogRef', dialogRef);
 
-defineExpose({ open, close });
+// Expose isOpen as a getter so callers can distinguish "props say show=true
+// but dialog hasn't opened yet" from "dialog is actually visible". This
+// lets SpellCheckModal's global keydown listener guard against the race
+// where the parent sets show=true synchronously but the async watcher
+// hasn't called open() yet — without this, the same Enter keypress that
+// triggers confirmOnSendReply() also fires onSendCorrected() before the
+// modal is visible.
+defineExpose({ open, close, getIsOpen: () => isOpen.value });
 </script>
 
 <template>

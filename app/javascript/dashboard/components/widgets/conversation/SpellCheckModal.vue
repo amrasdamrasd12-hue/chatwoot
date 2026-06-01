@@ -167,6 +167,12 @@ const correctedTokens = computed(() =>
 // so a single mistaken keystroke can't bypass the spell-check.
 const handleKeydown = e => {
   if (!props.show) return;
+  // Guard against the race condition where props.show is updated synchronously
+  // (parent sets showSpellCheckModal=true) but the Dialog's async watcher
+  // hasn't called open() yet. Without this, the same Enter keypress that
+  // triggers confirmOnSendReply() would also fire onSendCorrected() before
+  // the user even sees the modal.
+  if (!dialogRef.value?.getIsOpen?.()) return;
   const isPlainEnter =
     e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey;
   if (isPlainEnter) {
