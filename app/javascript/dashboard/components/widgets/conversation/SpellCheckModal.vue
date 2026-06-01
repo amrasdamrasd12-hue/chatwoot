@@ -25,12 +25,20 @@ const emit = defineEmits([
 
 const dialogRef = ref(null);
 const confirmOriginal = ref(false);
+// Tracks whether an explicit action button (corrected / original / edit) was
+// already chosen this lifecycle. The Dialog's @close fires for ANY dismissal —
+// including the close() we trigger after an explicit choice — so without this
+// flag the @close handler would also emit a spurious 'edited' decision,
+// poisoning ReplyBox's edited-text snapshot. We only treat @close as an edit
+// when it's a genuine dismissal (Esc / backdrop / X) with no prior decision.
+const decisionTaken = ref(false);
 
 watch(
   () => props.show,
   newVal => {
     if (newVal) {
       confirmOriginal.value = false;
+      decisionTaken.value = false;
       dialogRef.value?.open();
     } else {
       dialogRef.value?.close();
@@ -41,11 +49,25 @@ watch(
 const close = () => {
   emit('update:show', false);
 };
+// Explicit "Edit" button + genuine dismissal (Esc / backdrop / X) both route
+// here. Guarded so exactly one decision is emitted per lifecycle: a click
+// emits 'edit' then close() fires @close -> onDialogClose, which no-ops because
+// the flag is already set.
 const onEdit = () => {
+  if (decisionTaken.value) return;
+  decisionTaken.value = true;
+  emit('edit');
+  close();
+};
+const onDialogClose = () => {
+  if (decisionTaken.value) return;
+  decisionTaken.value = true;
   emit('edit');
   close();
 };
 const onSendCorrected = () => {
+  if (decisionTaken.value) return;
+  decisionTaken.value = true;
   emit('sendCorrected', props.corrected);
   close();
 };
@@ -54,6 +76,8 @@ const onSendOriginalClick = () => {
     confirmOriginal.value = true;
     return;
   }
+  if (decisionTaken.value) return;
+  decisionTaken.value = true;
   emit('sendOriginal', props.original);
   close();
 };
@@ -167,6 +191,10 @@ const correctedTokens = computed(() =>
 // so a single mistaken keystroke can't bypass the spell-check.
 const handleKeydown = e => {
   if (!props.show) return;
+  // Ignore key auto-repeat: holding Enter to send a reply can both open the
+  // modal and immediately auto-accept the correction in the same keypress
+  // burst. Only a fresh, deliberate keystroke should accept.
+  if (e.repeat) return;
   // Guard against the race condition where props.show is updated synchronously
   // (parent sets showSpellCheckModal=true) but the Dialog's async watcher
   // hasn't called open() yet. Without this, the same Enter keypress that
@@ -194,7 +222,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
     :show-confirm-button="false"
     :close-on-backdrop-click="false"
     aria-labelled-by-id="spell-check-title"
-    @close="onEdit"
+    aria-described-by-id="spell-check-corrected"
+    @close="onDialogClose"
   >
     <!-- Constrained wrapper: header + footer stay anchored, only the
          message content scrolls so action buttons are always reachable
@@ -243,6 +272,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
             </span>
           </div>
           <p
+            id="spell-check-corrected"
             class="whitespace-pre-wrap text-[19px] font-medium leading-[1.85] text-n-slate-12"
           >
             <span v-for="(tok, i) in correctedTokens" :key="`c-${i}`">
