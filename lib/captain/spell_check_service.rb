@@ -20,7 +20,11 @@ class Captain::SpellCheckService < Captain::BaseTaskService
   MINI_MODEL = 'gpt-4.1-mini'.freeze
   LONG_MESSAGE_THRESHOLD = 500
   VALID_STRATEGIES = %w[skip nano mini hybrid].freeze
-  DEFAULT_STRATEGY = 'skip'.freeze
+  # Default `nano` so BOTH short and long messages get spell-checked. Prod
+  # runs on free Vertex/Gemini, so the old `skip` (no check past 500 chars)
+  # left long replies silently unchecked for no cost saving. The `skip`
+  # option stays available for accounts that explicitly want it.
+  DEFAULT_STRATEGY = 'nano'.freeze
 
   # Per-account strictness selector. The Liquid template branches on this
   # integer so each level emits a different rulebook to the model. Default
@@ -131,74 +135,26 @@ class Captain::SpellCheckService < Captain::BaseTaskService
     ]
   end
 
-  # JSON metadata fragments the model occasionally leaks into the
-  # user-facing "corrected" string when it loses focus on a long input.
-  # Spotting any of these means we shouldn't show that text to the agent.
-  JSON_LEAK_RE = /
-    "corrected"\s*:|
-    "fixes"\s*:|
-    "wrong"\s*:|
-    "right"\s*:|
-    "why"\s*:
-  /x
-
-  # The prompt asks for JSON of shape
-  #   { "corrected": "...", "fixes": [{ "wrong", "right", "why" }, ...] }
-  # nano can fail to honour that on long inputs — typically it starts
-  # writing the corrected text as plain prose and only emits a JSON
-  # fragment at the tail end. We refuse to render those garbled
-  # responses to the agent; treating the message as clean is much safer
-  # than surfacing raw JSON in the modal.
+  # The prompt asks the model for ONLY the fixes array — shape
+  #   { "fixes": [{ "wrong", "right", "why" }, ...] }
+  # — never the full corrected text (echoing it doubled output tokens and
+  # the filter rebuilds corrected from fixes anyway). So we only parse and
+  # validate fixes here; `corrected` is a placeholder (the original) that
+  # SpellCheckLevelFilter.apply replaces with the rebuilt-from-fixes string.
+  # Malformed JSON (no parseable object / no fixes key) → fail open: treat
+  # the reply as clean rather than block the agent on a garbled response.
   def parse_response(raw)
     parsed = extract_json(raw)
-    fixes = build_fixes(parsed.is_a?(Hash) ? parsed['fixes'] : [])
-    corrected = usable_corrected(parsed, raw)
+    return safe_no_errors_result unless parsed.is_a?(Hash) && parsed.key?('fixes')
 
-    if corrected.nil?
-      # Gemini frequently returns ghost fixes: corrected == original even
-      # though fixes[] lists real errors. usable_corrected drops the string,
-      # but the fixes are still valid — SpellCheckLevelFilter.apply rebuilds
-      # the corrected text from fixes anyway, so pass content as placeholder.
-      return safe_no_errors_result if fixes.empty?
-
-      Rails.logger.info '[spell_check] ghost corrected but valid fixes — rebuilding from fixes'
-      corrected = content
-    end
+    fixes = build_fixes(parsed['fixes'])
 
     {
       has_errors: fixes.any?,
       original: content,
-      corrected: corrected,
+      corrected: content, # placeholder; the level filter rebuilds it from fixes
       fixes: fixes
     }
-  end
-
-  # Returns the corrected string when the response is safe to surface,
-  # else nil (after logging why). Rejects three garbled shapes nano emits
-  # on long inputs: malformed JSON, leaked JSON metadata in the text, and
-  # ghost fixes where the corrected string equals the original verbatim
-  # (which would render two identical blocks and confuse the agent).
-  def usable_corrected(parsed, raw)
-    if parsed.nil? || !parsed.is_a?(Hash) || parsed['corrected'].nil?
-      Rails.logger.warn "[spell_check] malformed JSON (len=#{raw.length}): #{raw[0, 120]}"
-      return nil
-    end
-
-    corrected = parsed['corrected'].to_s
-    if corrected.empty?
-      Rails.logger.warn '[spell_check] empty corrected string from model — treating as malformed'
-      return nil
-    end
-    if corrected.match?(JSON_LEAK_RE)
-      Rails.logger.warn "[spell_check] JSON leaked into corrected text: #{corrected[0, 120]}"
-      return nil
-    end
-    if equivalent?(content, corrected)
-      Rails.logger.warn '[spell_check] ghost fixes — corrected matches original verbatim'
-      return nil
-    end
-
-    corrected
   end
 
   # Normalise the model's fix list: drop non-hashes, blanks, and phantom
@@ -261,6 +217,8 @@ class Captain::SpellCheckService < Captain::BaseTaskService
       strictness: effective_strictness,
       model_used: model_used,
       has_errors: result[:has_errors] ? true : false,
+      # FILTERED fix count — `result` is post-SpellCheckLevelFilter, so this
+      # reflects what the agent actually sees, not the raw model count.
       errors_count: Array(result[:fixes]).size,
       original_length: content.to_s.length,
       corrected_length: result[:corrected].to_s.length,
@@ -268,12 +226,15 @@ class Captain::SpellCheckService < Captain::BaseTaskService
     }
   end
 
-  def equivalent?(original, candidate)
-    normalize(original) == normalize(candidate)
-  end
+  # Tatweel (U+0640) plus zero-width/RTL marks (U+200B-200F, U+202A-202E):
+  # all invisible, so leaving them in would let ghost/clean detection be
+  # defeated by a string that looks identical but isn't byte-equal.
+  INVISIBLE_MARKS = /[ـ​-‏‪-‮]/
 
+  # Collapse whitespace and drop invisible marks so two visually-identical
+  # strings compare equal.
   def normalize(text)
-    text.to_s.gsub(/\s+/, ' ').strip
+    text.to_s.gsub(INVISIBLE_MARKS, '').gsub(/\s+/, ' ').strip
   end
 
   def event_name

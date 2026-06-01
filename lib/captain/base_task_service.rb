@@ -9,6 +9,14 @@ class Captain::BaseTaskService
   TOKEN_LIMIT = 400_000
   GPT_MODEL = Llm::Config::DEFAULT_MODEL
 
+  # Eltafouk: the spell-check guard runs inline on every outgoing send, so a
+  # slow/throttled Gemini must NOT block the agent for minutes. ruby_llm
+  # defaults to a 300s timeout + 3 retries on 429/5xx; for a pre-send guard
+  # that is fail-open we want an aggressive timeout and at most one retry so
+  # the call dies fast and the message still sends (unchecked) on failure.
+  FAIL_OPEN_REQUEST_TIMEOUT = 9
+  FAIL_OPEN_MAX_RETRIES = 1
+
   # Prepend enterprise module to subclasses when they're defined.
   # This ensures the enterprise perform wrapper is applied even when
   # subclasses define their own perform method, since prepend puts
@@ -59,13 +67,36 @@ class Captain::BaseTaskService
       # Eltafouk: route every Captain task to Gemini on Vertex AI (covered
       # by the Ultra $100/mo Cloud credit). The requested gpt-* model is
       # overridden to the configured Gemini model.
-      Llm::Config.with_vertex { |context| run_llm(context, Llm::Config::VERTEX_MODEL, messages, tools, :vertexai) }
+      Llm::Config.with_vertex do |context|
+        apply_fail_open_timeout(context)
+        run_llm(context, Llm::Config::VERTEX_MODEL, messages, tools, :vertexai)
+      end
     else
-      Llm::Config.with_api_key(api_key, api_base: api_base) { |context| run_llm(context, model, messages, tools, nil) }
+      Llm::Config.with_api_key(api_key, api_base: api_base) do |context|
+        apply_fail_open_timeout(context)
+        run_llm(context, model, messages, tools, nil)
+      end
     end
   rescue StandardError => e
     ChatwootExceptionTracker.new(e, account: account).capture_exception
     { error: e.message, request_messages: messages }
+  end
+
+  # Pre-send guards (e.g. spell-check) must fail open fast. The context is
+  # built per-call, so tightening its config here only affects this request;
+  # the Faraday connection reads request_timeout/max_retries when the chat's
+  # provider is instantiated, so this must run BEFORE context.chat(...).
+  def apply_fail_open_timeout(context)
+    return unless fail_open_guard?
+
+    context.config.request_timeout = FAIL_OPEN_REQUEST_TIMEOUT
+    context.config.max_retries = FAIL_OPEN_MAX_RETRIES
+  end
+
+  # True for inline pre-send guards that must never block the agent's send.
+  # Other Captain tasks keep ruby_llm's generous defaults.
+  def fail_open_guard?
+    event_name == 'spell_check'
   end
 
   def run_llm(context, model, messages, tools, provider)
@@ -82,12 +113,26 @@ class Captain::BaseTaskService
     system_msg = messages.find { |m| m[:role] == 'system' }
     chat.with_instructions(system_msg[:content]) if system_msg
 
+    chat = enable_json_mode(chat, provider)
+
     if tools.any?
       tools.each { |tool| chat = chat.with_tool(tool) }
       chat.on_end_message { |message| record_generation(chat, message, model) }
     end
 
     chat
+  end
+
+  # Force the model to emit a parseable JSON object for fail-open guards whose
+  # whole contract is JSON. Gemini honours generationConfig.responseMimeType;
+  # ruby_llm deep-merges with_params into the rendered payload, so this lands
+  # cleanly without a full response schema (the prompt owns the shape). Scoped
+  # to Vertex/Gemini only — OpenAI fallback ignores this key shape, so we skip
+  # it there rather than inject an unrecognised param.
+  def enable_json_mode(chat, provider)
+    return chat unless fail_open_guard? && provider == :vertexai
+
+    chat.with_params(generationConfig: { responseMimeType: 'application/json' })
   end
 
   def add_messages_if_needed(chat, conversation_messages)
