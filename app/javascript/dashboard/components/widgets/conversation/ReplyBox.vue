@@ -177,6 +177,10 @@ export default {
       spellCheckEditedText: null,
       spellCheckCache: new Map(),
       spellCheckInFlight: null,
+      // Monotonic token: each prefetch bumps it; a resolving prefetch only
+      // commits to the cache / clears in-flight if it's still the latest,
+      // so superseded burst-typing requests are ignored.
+      spellCheckPrefetchSeq: 0,
       debouncedSpellCheckPrefetch: () => {},
       // Eltafouk: race guard against double-Enter. Without this, two
       // confirmOnSendReply invocations can sit on the same spell_check
@@ -532,6 +536,9 @@ export default {
         this.spellCheckFixes = [];
         this.spellCheckCache.clear();
         this.spellCheckInFlight = null;
+        // Bump the prefetch token so any in-flight request from the previous
+        // conversation is treated as stale and dropped on resolve.
+        this.spellCheckPrefetchSeq += 1;
         this.spellCheckEditedText = null;
       }
     },
@@ -573,7 +580,9 @@ export default {
     this.debouncedSpellCheckPrefetch = debounce(() => {
       if (this.isPrivate) return;
       if (this.spellCheckSettingsStore?.isDmEnabled === false) return;
-      const trimmed = (this.message || '').trim();
+      // Key on the signature-stripped body so the send-path lookup (which
+      // also strips the signature) actually hits this prefetched result.
+      const trimmed = this.spellCheckBody(this.message);
       if (trimmed.length < 3) return;
       if (!/\p{Script=Arabic}/u.test(trimmed)) return;
       if (this.spellCheckCache.has(trimmed)) return;
@@ -828,14 +837,40 @@ export default {
     hideContentTemplatesModal() {
       this.showContentTemplatesModal = false;
     },
+    // Eltafouk: the canonical body the spell-check runs on. We always strip
+    // the signature (it must never be "corrected", and it must not change the
+    // cache key) and trim. Used identically by the prefetcher's cache key and
+    // the send-path lookup so a prefetched result is actually reused.
+    spellCheckBody(message) {
+      let trimmed = (message || '').trim();
+      if (this.sendWithSignature && this.messageSignature && !this.isPrivate) {
+        const effectiveChannelType = getEffectiveChannelType(
+          this.channelType,
+          this.inbox?.medium || ''
+        );
+        trimmed = removeSignature(
+          trimmed,
+          this.messageSignature,
+          effectiveChannelType
+        );
+      }
+      return trimmed;
+    },
     // Eltafouk: kick off a spell-check request in the background and
     // populate the cache. Returns the promise so a near-simultaneous send
     // click can await the same in-flight request rather than starting a
-    // duplicate one.
+    // duplicate one. A monotonic sequence token tags each request; when a
+    // later one supersedes it, the stale resolve is dropped (cache write
+    // skipped, in-flight slot left untouched) so burst-typing doesn't leave
+    // an outdated result cached under a key that's no longer being typed.
     runBackgroundSpellCheck(trimmed) {
+      this.spellCheckPrefetchSeq += 1;
+      const seq = this.spellCheckPrefetchSeq;
       const promise = TasksAPI.spellCheck(trimmed, 'dm', this.currentChat?.id)
         .then(({ data }) => {
-          this.spellCheckCache.set(trimmed, data);
+          if (seq === this.spellCheckPrefetchSeq) {
+            this.spellCheckCache.set(trimmed, data);
+          }
           return data;
         })
         .catch(e => {
@@ -844,11 +879,14 @@ export default {
           return null;
         })
         .finally(() => {
-          if (this.spellCheckInFlight?.trimmed === trimmed) {
+          if (
+            seq === this.spellCheckPrefetchSeq &&
+            this.spellCheckInFlight?.trimmed === trimmed
+          ) {
             this.spellCheckInFlight = null;
           }
         });
-      this.spellCheckInFlight = { trimmed, promise };
+      this.spellCheckInFlight = { trimmed, promise, seq };
       return promise;
     },
     // Eltafouk: spell-check modal callbacks. Each "send" path flips
@@ -866,25 +904,50 @@ export default {
       if (!eventId) return;
       TasksAPI.spellCheckDecision(eventId, decision).catch(() => {});
     },
+    // Eltafouk: re-attach the signature that was stripped before the check.
+    // The modal works on a signature-stripped body, so the corrected /
+    // original text it hands back has no signature; without this the customer
+    // would receive a message missing the signature a normal send appends.
+    // Mirrors the normal send path's appendSignature (no-op for accounts with
+    // signatures disabled or empty signatures).
+    withSignature(message) {
+      if (this.sendWithSignature && this.messageSignature && !this.isPrivate) {
+        const effectiveChannelType = getEffectiveChannelType(
+          this.channelType,
+          this.inbox?.medium || ''
+        );
+        return appendSignature(
+          message,
+          this.messageSignature,
+          effectiveChannelType
+        );
+      }
+      return message;
+    },
     onSpellCheckSendCorrected(corrected) {
       this.finalizeSpellCheckDecision('corrected');
-      this.message = corrected;
+      this.message = this.withSignature(corrected);
       this.spellCheckBypassOnce = true;
       this.showSpellCheckModal = false;
       this.confirmOnSendReply();
     },
     onSpellCheckSendOriginal(original) {
       this.finalizeSpellCheckDecision('sent_original');
-      this.message = original;
+      this.message = this.withSignature(original);
       this.spellCheckBypassOnce = true;
       this.showSpellCheckModal = false;
       this.confirmOnSendReply();
     },
     onSpellCheckEdit() {
       this.finalizeSpellCheckDecision('edited');
-      // Record the text the agent was shown so we can detect an unchanged
-      // re-send (see spellCheckEditedText in data()).
-      this.spellCheckEditedText = (this.message || '').trim();
+      // Record the signature-stripped text the agent was shown so we can
+      // detect an unchanged re-send (see spellCheckEditedText in data()).
+      // Guard against a spurious modal-close handing us an empty string: only
+      // record a genuine snapshot, otherwise leave the previous one intact.
+      const snapshot = this.spellCheckBody(this.message);
+      if (snapshot) {
+        this.spellCheckEditedText = snapshot;
+      }
       this.showSpellCheckModal = false;
     },
     async confirmOnSendReply() {
@@ -926,23 +989,15 @@ export default {
         // the in-flight prefetch when it's for the same content;
         // otherwise fall back to a fresh blocking call. Failure is
         // fail-open.
-        let trimmed = (this.message || '').trim();
-        // Remove signature before spell-check to prevent it from being corrected
-        if (
-          this.sendWithSignature &&
-          this.messageSignature &&
-          !this.isPrivate
-        ) {
-          const effectiveChannelType = getEffectiveChannelType(
-            this.channelType,
-            this.inbox?.medium || ''
-          );
-          trimmed = removeSignature(
-            trimmed,
-            this.messageSignature,
-            effectiveChannelType
-          );
-        }
+        // Capture the conversation we're composing/checking for BEFORE any
+        // await. If the agent switches conversation while the spell-check is
+        // in flight, this lets us abort rather than leak conversation A's
+        // reply into conversation B. (Fail-safe: never send a body into a
+        // conversation other than the one it was composed for.)
+        const targetConversationId = this.currentChat?.id;
+        // Remove signature before spell-check to prevent it from being
+        // corrected, and to match the prefetch cache key exactly.
+        const trimmed = this.spellCheckBody(this.message);
         // If the agent clicked "تعديل النص" but sent the same unchanged text,
         // treat this send as a bypass — they reviewed and chose to keep the
         // original. Clear the record so subsequent sends re-check normally.
@@ -987,6 +1042,13 @@ export default {
             } finally {
               this.isSpellChecking = false;
             }
+          }
+          // The agent may have switched conversations while we awaited the
+          // spell-check above. Sending now would deliver this draft into the
+          // wrong conversation (and opening the modal would attach it to the
+          // wrong chat). Abort: the draft stays put for the original chat.
+          if (this.currentChat?.id !== targetConversationId) {
+            return;
           }
           if (data?.has_errors) {
             this.spellCheckOriginal = data.original || trimmed;
