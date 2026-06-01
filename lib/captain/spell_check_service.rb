@@ -151,13 +151,21 @@ class Captain::SpellCheckService < Captain::BaseTaskService
   # than surfacing raw JSON in the modal.
   def parse_response(raw)
     parsed = extract_json(raw)
+    fixes = build_fixes(parsed.is_a?(Hash) ? parsed['fixes'] : [])
     corrected = usable_corrected(parsed, raw)
-    return safe_no_errors_result if corrected.nil?
 
-    fixes = build_fixes(parsed['fixes'])
+    if corrected.nil?
+      # Gemini frequently returns ghost fixes: corrected == original even
+      # though fixes[] lists real errors. usable_corrected drops the string,
+      # but the fixes are still valid — SpellCheckLevelFilter.apply rebuilds
+      # the corrected text from fixes anyway, so pass content as placeholder.
+      return safe_no_errors_result if fixes.empty?
+
+      Rails.logger.info '[spell_check] ghost corrected but valid fixes — rebuilding from fixes'
+      corrected = content
+    end
+
     {
-      # Authoritative signal: if the model reported zero real fixes,
-      # treat the message as clean even when whitespace/punctuation drifted.
       has_errors: fixes.any?,
       original: content,
       corrected: corrected,
@@ -177,6 +185,10 @@ class Captain::SpellCheckService < Captain::BaseTaskService
     end
 
     corrected = parsed['corrected'].to_s
+    if corrected.empty?
+      Rails.logger.warn '[spell_check] empty corrected string from model — treating as malformed'
+      return nil
+    end
     if corrected.match?(JSON_LEAK_RE)
       Rails.logger.warn "[spell_check] JSON leaked into corrected text: #{corrected[0, 120]}"
       return nil
