@@ -170,6 +170,11 @@ export default {
       spellCheckFixes: [],
       spellCheckEventId: null,
       spellCheckBypassOnce: false,
+      // Stores the trimmed text at the moment the agent clicked "تعديل النص".
+      // If they press send again with the same unchanged text, we auto-bypass
+      // the spell-check and send their original rather than re-opening the
+      // modal (which would then auto-send the correction on Enter).
+      spellCheckEditedText: null,
       spellCheckCache: new Map(),
       spellCheckInFlight: null,
       debouncedSpellCheckPrefetch: () => {},
@@ -527,6 +532,7 @@ export default {
         this.spellCheckFixes = [];
         this.spellCheckCache.clear();
         this.spellCheckInFlight = null;
+        this.spellCheckEditedText = null;
       }
     },
     message() {
@@ -876,8 +882,9 @@ export default {
     },
     onSpellCheckEdit() {
       this.finalizeSpellCheckDecision('edited');
-      // User wants to revise — keep the draft in the editor and close the
-      // modal; the next send will re-run the check on whatever they type.
+      // Record the text the agent was shown so we can detect an unchanged
+      // re-send (see spellCheckEditedText in data()).
+      this.spellCheckEditedText = (this.message || '').trim();
       this.showSpellCheckModal = false;
     },
     async confirmOnSendReply() {
@@ -936,6 +943,17 @@ export default {
             effectiveChannelType
           );
         }
+        // If the agent clicked "تعديل النص" but sent the same unchanged text,
+        // treat this send as a bypass — they reviewed and chose to keep the
+        // original. Clear the record so subsequent sends re-check normally.
+        if (
+          this.spellCheckEditedText !== null &&
+          trimmed === this.spellCheckEditedText
+        ) {
+          this.spellCheckEditedText = null;
+          this.spellCheckBypassOnce = true;
+        }
+
         // Honor the account-level DM toggle — when an admin disables the
         // guard for DM messages the modal stays out of the agent's way
         // and we never hit the LLM endpoint at all.
