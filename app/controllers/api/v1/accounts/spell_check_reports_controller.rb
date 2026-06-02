@@ -41,14 +41,57 @@ class Api::V1::Accounts::SpellCheckReportsController < Api::V1::Accounts::BaseCo
     }
   end
 
-  # Full per-fix list for a single agent — no aggregation, every row.
+  # Per-fix corrections list. WITH a `user_id` it's one agent's rows (the
+  # per-agent drill-down); WITHOUT it, every agent's rows (the account-wide
+  # table). Each row carries the agent name, surface, why, decision and — for
+  # 'edited' decisions — the agent's final text (edited_text).
   def corrections
-    range_from, range_to = parsed_range
-    uid = params[:user_id].to_i
+    base = corrections_scope
+    # True count (un-limited) so the table shows the real total and can flag
+    # truncation, while the row LIMIT caps the payload size.
+    total = base.unscope(:order).count
+    rows = base.joins('LEFT JOIN users ON users.id = spell_check_fixes.user_id')
+               .select(corrections_select)
+               .order(created_at: :desc)
+               .limit(CORRECTIONS_LIMIT)
 
-    # Subquery to find the closest message sent by the user in this conversation
-    # after the spell check event occurred.
-    message_subquery = <<-SQL.squish
+    render json: {
+      user_id: params[:user_id].presence,
+      total: total,
+      truncated: total > CORRECTIONS_LIMIT,
+      corrections: rows.map { |f| serialize_correction(f) }
+    }
+  end
+
+  private
+
+  def corrections_scope
+    range_from, range_to = parsed_range
+    scope = Current.account.spell_check_fixes
+                   .where(created_at: range_from..range_to)
+                   .joins(:spell_check_event)
+                   .where(spell_check_events: { decision: DECISIONS })
+    return scope if params[:user_id].blank?
+
+    scope.where(user_id: params[:user_id])
+  end
+
+  def corrections_select
+    [
+      'spell_check_fixes.*',
+      'spell_check_events.decision AS event_decision',
+      'spell_check_events.surface AS event_surface',
+      'spell_check_events.conversation_id AS event_conversation_id',
+      'spell_check_events.edited_text AS event_edited_text',
+      'users.name AS agent_name',
+      "(#{correction_message_subquery}) AS target_message_id"
+    ]
+  end
+
+  # Closest message the agent sent in the conversation after the event — used
+  # to deep-link the correction row to the actual reply in the inbox.
+  def correction_message_subquery
+    <<-SQL.squish
       SELECT id FROM messages
       WHERE messages.conversation_id = spell_check_events.conversation_id
       AND messages.sender_id = spell_check_events.user_id
@@ -57,42 +100,24 @@ class Api::V1::Accounts::SpellCheckReportsController < Api::V1::Accounts::BaseCo
       ORDER BY messages.created_at ASC
       LIMIT 1
     SQL
-
-    base = Current.account.spell_check_fixes
-                  .where(user_id: uid, created_at: range_from..range_to)
-                  .joins(:spell_check_event)
-                  .where(spell_check_events: { decision: DECISIONS })
-
-    # True count (un-limited) so the table can show the real total and flag
-    # that the returned rows are truncated, while the row LIMIT still caps
-    # the payload size.
-    total = base.unscope(:order).count
-    fixes = base.select(
-      'spell_check_fixes.*',
-      'spell_check_events.decision AS event_decision',
-      'spell_check_events.conversation_id AS event_conversation_id',
-      "(#{message_subquery}) AS target_message_id"
-    ).order(created_at: :desc).limit(CORRECTIONS_LIMIT)
-
-    render json: {
-      user_id: uid,
-      total: total,
-      truncated: total > CORRECTIONS_LIMIT,
-      corrections: fixes.map do |f|
-        {
-          wrong: f.wrong,
-          right: f.right,
-          category: f.category,
-          decision: f.event_decision,
-          conversation_id: f.event_conversation_id,
-          message_id: f.target_message_id,
-          created_at: f.created_at.iso8601
-        }
-      end
-    }
   end
 
-  private
+  def serialize_correction(fix)
+    {
+      agent: fix.agent_name,
+      user_id: fix.user_id,
+      wrong: fix.wrong,
+      right: fix.right,
+      why: fix.why,
+      category: fix.category,
+      decision: fix.event_decision,
+      surface: fix.event_surface,
+      edited_text: fix.event_edited_text,
+      conversation_id: fix.event_conversation_id,
+      message_id: fix.target_message_id,
+      created_at: fix.created_at.iso8601
+    }
+  end
 
   # Restrict every aggregation to finalised events (DECISIONS) so the
   # headline total, per-decision breakdown and error counts stay consistent.

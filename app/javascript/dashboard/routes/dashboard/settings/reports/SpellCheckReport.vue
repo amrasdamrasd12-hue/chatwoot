@@ -57,6 +57,21 @@ const L = {
   CORR_REJECTED: 'رفض',
   CORR_EDITED: 'عدّل',
   CORR_NOERR: 'بدون خطأ',
+  ALLCORR_TITLE: 'كل التصحيحات (كل الموظفين)',
+  ALLCORR_HINT: 'كل خطأ اكتشفه الموديل وقرار الموظف عليه — اعرض، فلتر، وصدّر.',
+  ALLCORR_EXPORT: 'تصدير Excel',
+  F_ALL: 'الكل',
+  F_DECISION: 'القرار',
+  F_TYPE: 'النوع',
+  F_AGENT: 'الموظف',
+  F_SEARCH: 'بحث في الكلمات…',
+  COL_WHY: 'السبب',
+  COL_TYPE: 'النوع',
+  COL_EDITED_AS: 'أرسلها',
+  TYPE_DM: 'رسالة',
+  TYPE_COMMENT: 'كومنت',
+  TRUNCATED: 'عرض أحدث 500 صف فقط — ضيّق النطاق لرؤية الباقي.',
+  ARROW: '←',
 };
 
 // Stable category keys ←→ Arabic label + chip colours. Full literal
@@ -173,6 +188,30 @@ const rangeLabel = computed(() => {
   return r.since === r.until ? r.since : `${r.since} — ${r.until}`;
 });
 
+// --- Account-wide corrections table (every agent) ---
+const allCorrections = ref([]);
+const allCorrTotal = ref(0);
+const allCorrTruncated = ref(false);
+const allCorrLoading = ref(false);
+
+const fetchAllCorrections = async () => {
+  allCorrLoading.value = true;
+  try {
+    const { data } = await SpellCheckReportsAPI.fetchAllCorrections(
+      rangeIso.value
+    );
+    allCorrections.value = data.corrections || [];
+    allCorrTotal.value = data.total || 0;
+    allCorrTruncated.value = !!data.truncated;
+  } catch (e) {
+    allCorrections.value = [];
+    allCorrTotal.value = 0;
+    allCorrTruncated.value = false;
+  } finally {
+    allCorrLoading.value = false;
+  }
+};
+
 const fetchReport = async () => {
   loading.value = true;
   error.value = null;
@@ -182,6 +221,7 @@ const fetchReport = async () => {
   try {
     const { data } = await SpellCheckReportsAPI.fetch(rangeIso.value);
     report.value = data;
+    fetchAllCorrections();
   } catch (e) {
     error.value = e.message || 'فشل التحميل';
   } finally {
@@ -375,6 +415,87 @@ const exportCsv = () => {
   const link = document.createElement('a');
   link.href = url;
   link.download = `spell-check-report-${rangeIso.value.since}_${rangeIso.value.until}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
+// --- Account-wide corrections table (every agent) ---
+// Only these three decisions ever produce fix rows (no_errors_send has none).
+const CORR_DECISIONS = ['corrected', 'sent_original', 'edited'];
+
+const corrFilterDecision = ref('');
+const corrFilterSurface = ref('');
+const corrFilterAgent = ref('');
+const corrSearch = ref('');
+
+const surfaceLabel = s => (s === 'comments' ? L.TYPE_COMMENT : L.TYPE_DM);
+
+// Distinct agents present in the loaded rows — populates the agent filter.
+const corrAgentOptions = computed(() => {
+  const seen = new Map();
+  allCorrections.value.forEach(c => {
+    const id = c.user_id || 'na';
+    if (!seen.has(id)) seen.set(id, c.agent || 'بدون موظف');
+  });
+  return Array.from(seen, ([id, name]) => ({ id: String(id), name }));
+});
+
+// Client-side filtering over the loaded (≤500) rows: decision, type, agent
+// and a free-text search across wrong/right/why.
+const filteredCorrections = computed(() => {
+  const q = corrSearch.value.trim();
+  return allCorrections.value.filter(c => {
+    if (corrFilterDecision.value && c.decision !== corrFilterDecision.value) {
+      return false;
+    }
+    if (
+      corrFilterSurface.value &&
+      (c.surface || 'dm') !== corrFilterSurface.value
+    ) {
+      return false;
+    }
+    if (
+      corrFilterAgent.value &&
+      String(c.user_id || 'na') !== corrFilterAgent.value
+    ) {
+      return false;
+    }
+    if (q && !`${c.wrong} ${c.right} ${c.why || ''}`.includes(q)) {
+      return false;
+    }
+    return true;
+  });
+});
+
+const exportCorrectionsCsv = () => {
+  const header = [
+    L.COL_AGENT,
+    L.CORR_WRONG,
+    L.CORR_RIGHT,
+    L.COL_WHY,
+    L.COL_TYPE,
+    L.CORR_DECISION,
+    L.COL_EDITED_AS,
+    L.CORR_DATE,
+    L.CORR_CONV,
+  ];
+  const lines = filteredCorrections.value.map(c => [
+    c.agent || '',
+    c.wrong,
+    c.right,
+    c.why || '',
+    surfaceLabel(c.surface),
+    decisionMeta(c.decision).label,
+    c.edited_text || '',
+    fmtDate(c.created_at),
+    convUrl(c.conversation_id, c.message_id) || '',
+  ]);
+  const csv = [header, ...lines].map(r => r.map(csvCell).join(',')).join('\n');
+  const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `spell-check-corrections-${rangeIso.value.since}_${rangeIso.value.until}.csv`;
   link.click();
   URL.revokeObjectURL(url);
 };
@@ -1072,6 +1193,195 @@ const exportCsv = () => {
           {{ L.LEGEND_EDITED }}
         </span>
       </div>
+
+      <!-- Account-wide corrections — every error, every agent, one table -->
+      <section
+        v-if="allCorrections.length || allCorrLoading"
+        class="rounded-2xl border border-n-weak bg-n-solid-1 shadow-sm"
+      >
+        <div
+          class="flex flex-wrap items-center justify-between gap-3 border-b border-n-weak px-5 py-4"
+        >
+          <div>
+            <h2 class="text-[14px] font-semibold text-n-slate-12">
+              {{ L.ALLCORR_TITLE }}
+            </h2>
+            <p class="mt-0.5 text-[12px] text-n-slate-11">
+              {{ L.ALLCORR_HINT }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="inline-flex shrink-0 items-center gap-2 rounded-lg border border-n-weak bg-n-solid-1 px-3 py-2 text-[12.5px] font-medium text-n-slate-12 shadow-sm transition-colors hover:bg-n-alpha-2"
+            @click="exportCorrectionsCsv"
+          >
+            <span
+              class="i-lucide-sheet size-4 text-n-teal-11"
+              aria-hidden="true"
+            />
+            {{ L.ALLCORR_EXPORT }}
+          </button>
+        </div>
+
+        <!-- Filters -->
+        <div
+          class="flex flex-wrap items-center gap-2 border-b border-n-weak px-5 py-3"
+        >
+          <select
+            v-model="corrFilterDecision"
+            class="rounded-lg border border-n-weak bg-n-alpha-1 px-2.5 py-1.5 text-[12.5px] text-n-slate-12 outline-none focus:border-n-brand"
+          >
+            <option value="">{{ L.F_DECISION }}: {{ L.F_ALL }}</option>
+            <option v-for="d in CORR_DECISIONS" :key="d" :value="d">
+              {{ decisionMeta(d).label }}
+            </option>
+          </select>
+          <select
+            v-model="corrFilterSurface"
+            class="rounded-lg border border-n-weak bg-n-alpha-1 px-2.5 py-1.5 text-[12.5px] text-n-slate-12 outline-none focus:border-n-brand"
+          >
+            <option value="">{{ L.F_TYPE }}: {{ L.F_ALL }}</option>
+            <option value="dm">{{ L.TYPE_DM }}</option>
+            <option value="comments">{{ L.TYPE_COMMENT }}</option>
+          </select>
+          <select
+            v-model="corrFilterAgent"
+            class="rounded-lg border border-n-weak bg-n-alpha-1 px-2.5 py-1.5 text-[12.5px] text-n-slate-12 outline-none focus:border-n-brand"
+          >
+            <option value="">{{ L.F_AGENT }}: {{ L.F_ALL }}</option>
+            <option v-for="ag in corrAgentOptions" :key="ag.id" :value="ag.id">
+              {{ ag.name }}
+            </option>
+          </select>
+          <label
+            class="inline-flex items-center gap-1.5 rounded-lg border border-n-weak bg-n-alpha-1 px-2.5 py-1.5 focus-within:border-n-brand"
+          >
+            <span class="i-lucide-search size-3.5 text-n-slate-10" />
+            <input
+              v-model="corrSearch"
+              type="text"
+              :placeholder="L.F_SEARCH"
+              class="w-[160px] bg-transparent text-[12.5px] text-n-slate-12 outline-none"
+            />
+          </label>
+          <span class="ms-auto text-[12px] tabular-nums text-n-slate-10">
+            {{ filteredCorrections.length }} / {{ allCorrTotal }}
+          </span>
+        </div>
+
+        <div
+          v-if="allCorrLoading"
+          class="px-5 py-8 text-center text-[12.5px] text-n-slate-11"
+        >
+          {{ L.CORR_LOADING }}
+        </div>
+        <div
+          v-else-if="!filteredCorrections.length"
+          class="px-5 py-8 text-center text-[12.5px] text-n-slate-11"
+        >
+          {{ L.EMPTY }}
+        </div>
+        <div v-else class="overflow-x-auto">
+          <table class="w-full text-[12.5px]">
+            <thead class="border-b border-n-weak text-n-slate-11">
+              <tr>
+                <th class="px-3 py-2.5 text-start font-semibold">
+                  {{ L.COL_AGENT }}
+                </th>
+                <th class="px-3 py-2.5 text-start font-semibold">
+                  {{ L.CORR_WRONG }} {{ L.ARROW }} {{ L.CORR_RIGHT }}
+                </th>
+                <th class="px-3 py-2.5 text-start font-semibold">
+                  {{ L.COL_WHY }}
+                </th>
+                <th class="px-3 py-2.5 text-center font-semibold">
+                  {{ L.COL_TYPE }}
+                </th>
+                <th class="px-3 py-2.5 text-center font-semibold">
+                  {{ L.CORR_DECISION }}
+                </th>
+                <th class="px-3 py-2.5 text-center font-semibold">
+                  {{ L.CORR_DATE }}
+                </th>
+                <th class="px-3 py-2.5 text-center font-semibold">
+                  {{ L.CORR_CONV }}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="(c, i) in filteredCorrections"
+                :key="i"
+                class="border-b border-n-weak/60 hover:bg-n-alpha-1"
+              >
+                <td class="px-3 py-2 text-n-slate-12">{{ c.agent || '—' }}</td>
+                <td class="px-3 py-2">
+                  <span class="font-medium text-n-teal-11">{{ c.right }}</span>
+                  <span class="mx-1 text-n-slate-9">{{ L.ARROW }}</span>
+                  <span class="text-n-ruby-11 line-through">{{ c.wrong }}</span>
+                  <span
+                    :class="`ms-1.5 rounded px-1 py-0.5 text-[10px] ${categoryChip(c.category)}`"
+                  >
+                    {{ categoryLabel(c.category) }}
+                  </span>
+                  <div
+                    v-if="c.decision === 'edited' && c.edited_text"
+                    class="mt-1 text-[11px] text-n-amber-11"
+                  >
+                    {{ L.COL_EDITED_AS }}:
+                    <span dir="auto" class="text-n-slate-11">{{
+                      c.edited_text
+                    }}</span>
+                  </div>
+                </td>
+                <td class="px-3 py-2 text-n-slate-11">{{ c.why || '—' }}</td>
+                <td class="px-3 py-2 text-center">
+                  <span
+                    class="rounded-md bg-n-alpha-2 px-1.5 py-0.5 text-[11px] text-n-slate-11"
+                  >
+                    {{ surfaceLabel(c.surface) }}
+                  </span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span
+                    class="inline-flex items-center gap-1"
+                    :class="decisionMeta(c.decision).cls"
+                  >
+                    <span
+                      :class="`${decisionMeta(c.decision).icon} size-3.5`"
+                    />
+                    {{ decisionMeta(c.decision).label }}
+                  </span>
+                </td>
+                <td
+                  class="px-3 py-2 text-center tabular-nums text-n-slate-10"
+                  dir="ltr"
+                >
+                  {{ fmtDate(c.created_at) }}
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <a
+                    v-if="convUrl(c.conversation_id, c.message_id)"
+                    :href="convUrl(c.conversation_id, c.message_id)"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center text-n-brand hover:underline"
+                  >
+                    <span class="i-lucide-external-link size-3.5" />
+                  </a>
+                  <span v-else class="text-n-slate-9">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div
+            v-if="allCorrTruncated"
+            class="px-5 py-2.5 text-center text-[11.5px] text-n-amber-11"
+          >
+            {{ L.TRUNCATED }}
+          </div>
+        </div>
+      </section>
     </template>
   </div>
 </template>

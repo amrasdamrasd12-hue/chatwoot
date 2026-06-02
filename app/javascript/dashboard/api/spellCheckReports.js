@@ -23,6 +23,14 @@ class SpellCheckReports extends ApiClient {
     if (until) params.until = until;
     return axios.get(`${this.url}/corrections`, { params });
   }
+
+  // Account-wide corrections (every agent) — same endpoint, no user_id.
+  fetchAllCorrections({ since, until } = {}) {
+    const params = {};
+    if (since) params.since = since;
+    if (until) params.until = until;
+    return axios.get(`${this.url}/corrections`, { params });
+  }
 }
 
 export default new SpellCheckReports();
