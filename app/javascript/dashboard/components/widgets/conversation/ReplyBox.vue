@@ -1050,6 +1050,12 @@ export default {
           if (this.currentChat?.id !== targetConversationId) {
             return;
           }
+          // The agent may have edited the draft while we awaited the check above, so
+          // the snapshot we validated ('trimmed') is now stale and the result can't be
+          // trusted for the current body. Abort; the next send re-checks the live text.
+          if (this.spellCheckBody(this.message) !== trimmed) {
+            return;
+          }
           if (data?.has_errors) {
             this.spellCheckOriginal = data.original || trimmed;
             this.spellCheckCorrected = data.corrected || trimmed;
