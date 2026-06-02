@@ -9,10 +9,7 @@ class Api::V1::Accounts::SpellCheckSettingsController < Api::V1::Accounts::BaseC
   DEFAULTS = {
     'dm_enabled' => true,
     'comments_enabled' => false,
-    'strictness' => Captain::SpellCheckService::DEFAULT_STRICTNESS,
-    'long_message_strategy' => Captain::SpellCheckService::DEFAULT_STRATEGY,
-    'evaluation_mode' => false,
-    'evaluation_strictness' => Captain::SpellCheckService::DEFAULT_EVAL_STRICTNESS
+    'long_message_strategy' => Captain::SpellCheckService::DEFAULT_STRATEGY
   }.freeze
 
   def show
@@ -31,7 +28,6 @@ class Api::V1::Accounts::SpellCheckSettingsController < Api::V1::Accounts::BaseC
   def serialized_response(settings)
     {
       settings: settings,
-      strictness_labels: Captain::SpellCheckService::STRICTNESS_LABELS,
       long_message_threshold: Captain::SpellCheckService::LONG_MESSAGE_THRESHOLD
     }
   end
@@ -42,26 +38,16 @@ class Api::V1::Accounts::SpellCheckSettingsController < Api::V1::Accounts::BaseC
 
   def filtered_params
     permitted = params.require(:settings)
-                      .permit(:dm_enabled, :comments_enabled, :strictness, :long_message_strategy,
-                              :evaluation_mode, :evaluation_strictness)
+                      .permit(:dm_enabled, :comments_enabled, :long_message_strategy)
                       .to_h.stringify_keys
-    clamp_strictness(permitted, 'strictness', Captain::SpellCheckService::DEFAULT_STRICTNESS)
-    clamp_strictness(permitted, 'evaluation_strictness', Captain::SpellCheckService::DEFAULT_EVAL_STRICTNESS)
     if permitted.key?('long_message_strategy') &&
        Captain::SpellCheckService::VALID_STRATEGIES.exclude?(permitted['long_message_strategy'])
       permitted['long_message_strategy'] = Captain::SpellCheckService::DEFAULT_STRATEGY
     end
-    %w[dm_enabled comments_enabled evaluation_mode].each do |bool_key|
+    %w[dm_enabled comments_enabled].each do |bool_key|
       permitted[bool_key] = ActiveModel::Type::Boolean.new.cast(permitted[bool_key]) if permitted.key?(bool_key)
     end
     permitted
-  end
-
-  def clamp_strictness(permitted, key, fallback)
-    return unless permitted.key?(key)
-
-    permitted[key] = permitted[key].to_i
-    permitted[key] = fallback unless permitted[key].between?(1, 6)
   end
 
   def check_authorization

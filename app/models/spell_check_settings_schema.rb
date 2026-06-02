@@ -10,13 +10,10 @@ module SpellCheckSettingsSchema
     'properties': {
       'dm_enabled': { 'type': %w[boolean null] },
       'comments_enabled': { 'type': %w[boolean null] },
-      'strictness': { 'type': %w[integer null], 'minimum': 1, 'maximum': 6 },
       'long_message_strategy': {
         'type': %w[string null],
         'enum': %w[skip nano mini hybrid]
-      },
-      'evaluation_mode': { 'type': %w[boolean null] },
-      'evaluation_strictness': { 'type': %w[integer null], 'minimum': 1, 'maximum': 6 }
+      }
     },
     'additionalProperties': false
   }.freeze
