@@ -1,39 +1,32 @@
 # Eltafouk: deterministic guardrail over the model's proposed fixes.
-# nano routinely ignores the prompt's per-level rules (it "normalises"
-# correct greetings like أهلًا at level 1, adding OR stripping
-# hamza/tanween, and even hallucinates the wrong-word). So we categorise
-# every fix it returns and keep only the ones this strictness level
-# actually permits — the guarantee the prompt alone can't give. Pure
-# function: takes the parsed result + level, returns a filtered result.
+# nano routinely ignores the prompt's rules (it "normalises" correct
+# greetings like أهلًا — adding OR stripping hamza/tanween — and even
+# hallucinates the wrong-word). So we enforce a few invariants on every
+# fix it returns and keep only the legitimate ones — the guarantee the
+# prompt alone can't give. Invariants only, no per-account levels. Pure
+# function: takes the parsed result, returns a filtered result.
 module Captain::SpellCheckLevelFilter
   module_function
 
-  # Each fix category is allowed from this strictness upward — mirrors the
-  # per-level rules in the spell_check Liquid template. Hamza is scrutinised
-  # from level 1 (adding a missing hamza is a common, clear fix); tanween
-  # stays pedantic (level 4+).
-  CATEGORY_MIN_LEVEL = {
-    'letter_missing' => 1, 'letter_extra' => 1, 'letter_wrong' => 1, 'other' => 1,
-    'hamza' => 1, 'taa' => 3, 'ya' => 3,
-    'tanween' => 4, 'diacritic' => 5, 'punctuation' => 6
-  }.freeze
-
   HAMZA_FORMS = /[أإآٱءؤئ]/
   TANWEEN_MARKS = /[ً-ٍ]/
-  # harakat + shadda + sukun + combining maddah/hamza-above/hamza-below
-  # (U+0653-0655) + superscript alef. Range stops below TANWEEN_MARKS
-  # (U+064B-064D) so the two never overlap.
-  DIACRITIC_MARKS = /[َ-ٰٕ]/
 
   # Drop fixes the model invented (wrong word absent from the original) or
-  # that this level forbids, then rebuild the corrected string from only
-  # the survivors. Nothing survives → clean: the agent's text passes
+  # that downgrade a correct word, then rebuild the corrected string from
+  # only the survivors. Nothing survives → clean: the agent's text passes
   # through untouched and no modal opens.
-  def apply(result, level)
+  def apply(result)
     return result unless result[:has_errors]
 
-    original = result[:original].to_s
-    kept = Array(result[:fixes]).filter_map { |fix| keep(fix, level, original) }
+    # NFC-normalize the boundary so a DECOMPOSED hamza (ALEF U+0627 + combining
+    # U+0654) composes to its precomposed form (أ U+0623) already in HAMZA_FORMS:
+    # downgrade?/include? then catch the decomposed strip with no regex changes,
+    # and stay consistent if the model and original disagree on the form.
+    original = result[:original].to_s.unicode_normalize(:nfc)
+    fixes = Array(result[:fixes]).map do |fix|
+      fix.merge(wrong: fix[:wrong].to_s.unicode_normalize(:nfc), right: fix[:right].to_s.unicode_normalize(:nfc))
+    end
+    kept = fixes.filter_map { |fix| keep(fix, original) }
     return clean(original) if kept.empty?
 
     corrected = rebuild(original, kept)
@@ -52,43 +45,26 @@ module Captain::SpellCheckLevelFilter
     text.to_s.gsub(/\s+/, ' ').strip
   end
 
-  # Returns the (possibly sanitised) fix to keep, or nil to drop it.
-  def keep(fix, level, original)
-    return nil unless allowed?(fix, level, original)
+  # Returns the fix to keep, or nil to drop it.
+  def keep(fix, original)
+    return nil unless allowed?(fix, original)
+    return nil if fix[:right].to_s == fix[:wrong].to_s
 
-    # A hamza fix at level 1 can slip a tanween in alongside it ("اهلا" →
-    # "أهلاً"); strip any mark the level doesn't permit so only the
-    # allowed part of the change survives.
-    right = sanitize(fix[:right], level)
-    return nil if right == fix[:wrong].to_s
-
-    { wrong: fix[:wrong], right: right, why: fix[:why] }
+    { wrong: fix[:wrong], right: fix[:right], why: fix[:why] }
   end
 
-  def allowed?(fix, level, original)
-    return false unless original.include?(fix[:wrong].to_s)
-    # Never strip a correct hamza/tanween — stripping a mark is always a
-    # downgrade of a correct word, never a legitimate fix. (Adding a
-    # missing one is fine, subject to the level below.)
-    return false if downgrade?(fix[:wrong], fix[:right])
-
-    category = Captain::SpellCheckCategorizer.category_for(fix[:wrong], fix[:right])
-    level >= CATEGORY_MIN_LEVEL.fetch(category, 1)
-  end
-
-  # Remove diacritic marks the level doesn't allow from a corrected word.
-  def sanitize(right, level)
-    text = right.to_s
-    text = text.gsub(TANWEEN_MARKS, '') if level < CATEGORY_MIN_LEVEL.fetch('tanween')
-    text = text.gsub(DIACRITIC_MARKS, '') if level < CATEGORY_MIN_LEVEL.fetch('diacritic')
-    text
+  def allowed?(fix, original)
+    # Never invent a fix (wrong must appear in the original) and never strip
+    # a correct hamza/tanween — stripping a mark is always a downgrade of a
+    # correct word, never a legitimate fix. (Adding a missing one is fine.)
+    original.include?(fix[:wrong].to_s) && !downgrade?(fix[:wrong], fix[:right])
   end
 
   # True only when the fix's ESSENTIAL change is stripping a correct
   # hamza/tanween — i.e. the bare letters are unchanged and the sole effect
   # is fewer marks. A genuine letter fix (مكتبه→مكتبة, كميا→كيميا) often
-  # incidentally drops a stray mark; we must NOT block those even at max
-  # strictness, only pure mark-strips of an otherwise-correct word.
+  # incidentally drops a stray mark; we must NOT block those, only pure
+  # mark-strips of an otherwise-correct word.
   def downgrade?(wrong, right)
     return false unless Captain::SpellCheckCategorizer.bare_letters(wrong) ==
                         Captain::SpellCheckCategorizer.bare_letters(right)
