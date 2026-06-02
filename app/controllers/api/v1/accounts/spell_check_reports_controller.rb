@@ -5,9 +5,8 @@
 #                      that agent's most repeated mistakes)
 #   - `by_day`       : per-day decision timeseries
 #   - `top_mistakes` : the most repeated wrong→right corrections overall
-#   - `meta.segments`: counts by strictness / model / surface so the UI
-#                      can warn that comparing agents on different rulers
-#                      isn't apples-to-apples
+#   - `meta.segments`: counts by model / surface so the UI can show which
+#                      models / surfaces the filtered data spans
 # All filtered by an optional `since`/`until` window and optional
 # `user_ids[]` selection.
 class Api::V1::Accounts::SpellCheckReportsController < Api::V1::Accounts::BaseController
@@ -228,13 +227,11 @@ class Api::V1::Accounts::SpellCheckReportsController < Api::V1::Accounts::BaseCo
     end
   end
 
-  # Fairness context: which strictness levels / models / surfaces the
-  # filtered data spans. Comparing agents measured on different rulers is
-  # misleading, so the UI surfaces this.
+  # Context: which models / surfaces the filtered data spans, surfaced by
+  # the UI so admins can see the mix behind the aggregate numbers.
   def segments_for(scope)
     base = scope.unscope(:order)
     {
-      by_strictness: base.group(:strictness).count.transform_keys(&:to_s),
       by_model: base.group(:model_used).count.transform_keys { |k| k || 'unknown' },
       by_surface: base.group(:surface).count.transform_keys { |k| k || 'unknown' }
     }

@@ -39,11 +39,6 @@ const L = {
   TOP_TITLE: 'أكتر الأخطاء تكراراً (كل الموظفين)',
   TOP_HINT: 'نقاط الضعف المشتركة اللي تستاهل تنبيه للفريق كله.',
   TREND_TITLE: 'النشاط اليومي',
-  FAIR_TITLE: 'انتبه للعدل في المقارنة',
-  FAIR_LEVELS: 'البيانات دي بتشمل مستويات تدقيق مختلفة',
-  FAIR_HINT:
-    'الموظف على مستوى أعلى بتظهر عليه أخطاء أكتر تلقائياً. للمقارنة العادلة وحّد المستوى من إعدادات المدقق.',
-  MODELS: 'الموديلات',
   NO_MISTAKES: 'مفيش أخطاء متسجّلة لهذا الموظف.',
   LEGEND_CORRECTED: 'قبل التصحيح',
   LEGEND_SENT: 'أرسل الأصلي',
@@ -208,7 +203,6 @@ watch(activePreset, () => {
 const summary = computed(() => report.value?.summary || null);
 const byAgent = computed(() => report.value?.by_agent || []);
 const topMistakes = computed(() => report.value?.top_mistakes || []);
-const segments = computed(() => report.value?.meta?.segments || null);
 const byDay = computed(() => report.value?.by_day || []);
 
 // Global category breakdown, biggest first, zeros dropped.
@@ -219,16 +213,6 @@ const globalCategories = computed(() => {
     .sort((a, b) => b[1] - a[1]);
 });
 const totalFixes = computed(() => summary.value?.total_fixes || 0);
-
-// Fairness: how many distinct strictness levels the data spans. More
-// than one → cross-agent comparison is on different rulers.
-const strictnessLevels = computed(() =>
-  Object.keys(segments.value?.by_strictness || {}).sort()
-);
-const modelsUsed = computed(() =>
-  Object.keys(segments.value?.by_model || {}).filter(m => m && m !== 'unknown')
-);
-const mixedLevels = computed(() => strictnessLevels.value.length > 1);
 
 const correctedRate = a =>
   a.total ? Math.round((100 * (a.decisions.corrected || 0)) / a.total) : 0;
@@ -525,28 +509,6 @@ const exportCsv = () => {
     </div>
 
     <template v-else-if="summary">
-      <!-- Fairness banner — only when the data mixes strictness levels -->
-      <div
-        v-if="mixedLevels"
-        class="flex items-start gap-3 rounded-xl bg-n-amber-2 px-4 py-3 ring-1 ring-n-amber-6"
-      >
-        <span
-          class="i-lucide-scale mt-0.5 size-4 shrink-0 text-n-amber-11"
-          aria-hidden="true"
-        />
-        <div class="text-[12.5px] leading-relaxed text-n-amber-12">
-          <p class="font-semibold">{{ L.FAIR_TITLE }}</p>
-          <p class="mt-0.5">
-            {{ L.FAIR_LEVELS }}:
-            <span class="font-bold">{{ strictnessLevels.join('، ') }}</span> —
-            {{ L.FAIR_HINT }}
-          </p>
-          <p v-if="modelsUsed.length" class="mt-0.5 text-n-amber-11">
-            {{ L.MODELS }}: {{ modelsUsed.join('، ') }}
-          </p>
-        </div>
-      </div>
-
       <!-- Summary KPI tiles -->
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div class="rounded-xl border border-n-weak bg-n-solid-1 p-4">
