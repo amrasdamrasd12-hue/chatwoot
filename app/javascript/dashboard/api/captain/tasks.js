@@ -141,6 +141,7 @@ class TasksAPI extends ApiClient {
     surface,
     conversationDisplayId,
     modelUsed,
+    editedText,
   }) {
     return axios.post(`${this.url}/spell_check_decision`, {
       decision,
@@ -150,6 +151,8 @@ class TasksAPI extends ApiClient {
       surface: surface || 'dm',
       conversation_display_id: conversationDisplayId,
       model_used: modelUsed,
+      // Only sent for 'edited' — the agent's final text vs the suggestion.
+      edited_text: editedText,
     });
   }
 

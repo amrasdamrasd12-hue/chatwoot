@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_05_30_120000) do
+ActiveRecord::Schema[7.1].define(version: 2026_06_02_100000) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -1214,6 +1214,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_05_30_120000) do
     t.string "decision", default: "pending", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.text "edited_text"
     t.index ["account_id", "created_at"], name: "index_spell_check_events_on_account_id_and_created_at"
     t.index ["account_id", "decision"], name: "index_spell_check_events_on_account_id_and_decision"
     t.index ["account_id", "user_id", "created_at"], name: "idx_spell_check_events_acct_user_time"

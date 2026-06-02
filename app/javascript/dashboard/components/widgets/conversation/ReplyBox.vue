@@ -177,6 +177,10 @@ export default {
       // the spell-check and send their original rather than re-opening the
       // modal (which would then auto-send the correction on Enter).
       spellCheckEditedText: null,
+      // True between clicking "تعديل النص" and the next send: defers the
+      // 'edited' audit row to the send so we record the agent's FINAL text
+      // (edited_text). Cleared when a fresh re-check supersedes the edit.
+      spellCheckPendingEdited: false,
       spellCheckCache: new Map(),
       spellCheckInFlight: null,
       // Monotonic token: each prefetch bumps it; a resolving prefetch only
@@ -542,6 +546,7 @@ export default {
         // conversation is treated as stale and dropped on resolve.
         this.spellCheckPrefetchSeq += 1;
         this.spellCheckEditedText = null;
+        this.spellCheckPendingEdited = false;
       }
     },
     message() {
@@ -948,11 +953,12 @@ export default {
       this.confirmOnSendReply();
     },
     onSpellCheckEdit() {
-      this.finalizeSpellCheckDecision('edited');
-      // Record the signature-stripped text the agent was shown so we can
-      // detect an unchanged re-send (see spellCheckEditedText in data()).
-      // Guard against a spurious modal-close handing us an empty string: only
-      // record a genuine snapshot, otherwise leave the previous one intact.
+      // Defer the 'edited' audit row to the next send so we capture the
+      // agent's FINAL text (edited_text) rather than the pre-edit suggestion.
+      // confirmOnSendReply creates it then — or clears this flag if a fresh
+      // re-check supersedes the edit. Record the snapshot so an unchanged
+      // re-send is detected; guard against a spurious empty modal-close.
+      this.spellCheckPendingEdited = true;
       const snapshot = this.spellCheckBody(this.message);
       if (snapshot) {
         this.spellCheckEditedText = snapshot;
@@ -1066,6 +1072,9 @@ export default {
             return;
           }
           if (data?.has_errors) {
+            // A fresh check that found errors supersedes any prior "edit"
+            // intent — the agent decides again on this modal.
+            this.spellCheckPendingEdited = false;
             this.spellCheckOriginal = data.original || trimmed;
             this.spellCheckCorrected = data.corrected || trimmed;
             this.spellCheckFixes = Array.isArray(data.fixes) ? data.fixes : [];
@@ -1081,7 +1090,7 @@ export default {
           // stays continuous. Placed AFTER both abort guards above so a
           // stale/aborted check never records, and fired fire-and-forget so it
           // never delays the actual reply below.
-          if (data && !data.has_errors) {
+          if (data && !data.has_errors && !this.spellCheckPendingEdited) {
             TasksAPI.spellCheckDecisionCreate({
               decision: 'no_errors_send',
               original: data.original || trimmed,
@@ -1095,6 +1104,23 @@ export default {
         }
 
         if (!this.showMentions) {
+          // Edit-capture (Solution 3): the agent took over via "تعديل النص",
+          // so record 'edited' NOW with the final text being sent (edited_text)
+          // plus the suggestion context stashed when the modal opened.
+          // Fire-and-forget — never blocks the reply.
+          if (this.spellCheckPendingEdited) {
+            TasksAPI.spellCheckDecisionCreate({
+              decision: 'edited',
+              original: this.spellCheckOriginal,
+              corrected: this.spellCheckCorrected,
+              fixes: this.spellCheckFixes,
+              surface: 'dm',
+              conversationDisplayId: targetConversationId,
+              modelUsed: this.spellCheckModelUsed,
+              editedText: trimmed,
+            }).catch(() => {});
+            this.spellCheckPendingEdited = false;
+          }
           const copilotAcceptedMessage = this.getCopilotAcceptedMessage();
           const isOnWhatsApp =
             this.isATwilioWhatsAppChannel ||

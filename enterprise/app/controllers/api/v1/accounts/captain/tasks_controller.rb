@@ -148,8 +148,17 @@ class Api::V1::Accounts::Captain::TasksController < Api::V1::Accounts::BaseContr
       model_used: params[:model_used],
       original_length: params[:original].to_s.length,
       corrected_length: params[:corrected].to_s.length,
-      errors_count: Array(params[:fixes]).size
+      errors_count: Array(params[:fixes]).size,
+      edited_text: edited_text_for(decision)
     }
+  end
+
+  # Only 'edited' carries the agent's final text — the reports page shows what
+  # they actually sent vs the model's suggestion; every other decision is nil.
+  def edited_text_for(decision)
+    return nil unless decision == 'edited'
+
+    params[:edited_text].to_s.presence
   end
 
   def spell_check_response(result)
