@@ -168,7 +168,9 @@ export default {
       spellCheckOriginal: '',
       spellCheckCorrected: '',
       spellCheckFixes: [],
-      spellCheckEventId: null,
+      // Model that actually ran the check (returned by /spell_check). Stashed
+      // so the decision-time create can persist model_used on the audit row.
+      spellCheckModelUsed: null,
       spellCheckBypassOnce: false,
       // Stores the trimmed text at the moment the agent clicked "تعديل النص".
       // If they press send again with the same unchanged text, we auto-bypass
@@ -529,7 +531,7 @@ export default {
         this.resetRecorderAndClearAttachments();
         // Reset spell-check state to prevent cross-conversation leakage
         this.showSpellCheckModal = false;
-        this.spellCheckEventId = null;
+        this.spellCheckModelUsed = null;
         this.spellCheckBypassOnce = false;
         this.spellCheckOriginal = '';
         this.spellCheckCorrected = '';
@@ -895,14 +897,21 @@ export default {
     // to that call. The next send (even for identical text) will run
     // a fresh check; agents asked to be re-prompted every time so they
     // can't accidentally bypass a typo by sending twice.
-    // Eltafouk: tiny helper — fire the audit-log finalization in the
-    // background. Catch and discard errors; an audit miss must never
-    // delay the actual reply.
+    // Eltafouk: tiny helper — create the audit-log event at decision time
+    // (Solution 3) and fire it in the background. Catch and discard errors;
+    // an audit miss must never delay the actual reply. The row is built from
+    // the snapshot the stateless check returned, so a typing prefetch that
+    // never leads to a send leaves no orphaned row.
     finalizeSpellCheckDecision(decision) {
-      const eventId = this.spellCheckEventId;
-      this.spellCheckEventId = null;
-      if (!eventId) return;
-      TasksAPI.spellCheckDecision(eventId, decision).catch(() => {});
+      TasksAPI.spellCheckDecisionCreate({
+        decision,
+        original: this.spellCheckOriginal,
+        corrected: this.spellCheckCorrected,
+        fixes: this.spellCheckFixes,
+        surface: 'dm',
+        conversationDisplayId: this.currentChat?.id,
+        modelUsed: this.spellCheckModelUsed,
+      }).catch(() => {});
     },
     // Eltafouk: re-attach the signature that was stripped before the check.
     // The modal works on a signature-stripped body, so the corrected /
@@ -1060,15 +1069,28 @@ export default {
             this.spellCheckOriginal = data.original || trimmed;
             this.spellCheckCorrected = data.corrected || trimmed;
             this.spellCheckFixes = Array.isArray(data.fixes) ? data.fixes : [];
-            this.spellCheckEventId = data.event_id || null;
-            if (this.spellCheckEventId) {
-              TasksAPI.spellCheckDecision(
-                this.spellCheckEventId,
-                'pending'
-              ).catch(() => {});
-            }
+            // Stash the model that ran so the decision-time create can persist
+            // model_used. No event exists yet — the check is stateless; the row
+            // is created when the agent picks a modal option (Solution 3).
+            this.spellCheckModelUsed = data.model_used || null;
             this.showSpellCheckModal = true;
             return;
+          }
+          // Clean send: the check ran and found no errors. Persist a
+          // 'no_errors_send' audit row (Solution 3) so reports' total_checks
+          // stays continuous. Placed AFTER both abort guards above so a
+          // stale/aborted check never records, and fired fire-and-forget so it
+          // never delays the actual reply below.
+          if (data && !data.has_errors) {
+            TasksAPI.spellCheckDecisionCreate({
+              decision: 'no_errors_send',
+              original: data.original || trimmed,
+              corrected: data.corrected || trimmed,
+              fixes: [],
+              surface: 'dm',
+              conversationDisplayId: targetConversationId,
+              modelUsed: data.model_used,
+            }).catch(() => {});
           }
         }
 

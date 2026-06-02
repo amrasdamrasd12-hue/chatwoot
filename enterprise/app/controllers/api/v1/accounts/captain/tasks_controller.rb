@@ -70,44 +70,52 @@ class Api::V1::Accounts::Captain::TasksController < Api::V1::Accounts::BaseContr
   def spell_check
     surface = params[:surface].to_s.presence || 'dm'
     if surface_disabled?(surface)
-      render json: { has_errors: false, original: params[:content].to_s, corrected: params[:content].to_s, fixes: [] }
+      render json: { has_errors: false, original: params[:content].to_s, corrected: params[:content].to_s, fixes: [], model_used: nil }
       return
     end
 
-    conversation_id = resolve_conversation_id
-    inbox_id = resolve_inbox_id(conversation_id)
-
+    # Stateless check — no event is written here. The client persists the
+    # outcome via /spell_check_decision once the agent finalises the modal
+    # (or on a clean send), so a typing prefetch leaves no orphaned rows.
     result = Captain::SpellCheckService.new(
       account: Current.account,
-      content: params[:content].to_s,
-      user_id: Current.user&.id,
-      conversation_id: conversation_id,
-      inbox_id: inbox_id,
-      surface: surface
+      content: params[:content].to_s
     ).perform
 
     if result[:error]
       render json: { error: result[:error] }, status: :unprocessable_entity
     else
-      render json: {
-        has_errors: result[:has_errors] ? true : false,
-        original: result[:original].to_s,
-        corrected: result[:corrected].to_s,
-        fixes: Array(result[:fixes]),
-        event_id: result[:event_id]
-      }
+      render json: spell_check_response(result)
     end
   end
 
-  # Eltafouk: the modal callbacks (تصحيح وإرسال / إرسال كما هو / تعديل
-  # النص) finalise the decision row created when the spell-check API was
-  # called. Fire-and-forget from the client side so a slow audit-log
-  # write never delays the actual customer reply.
+  # Eltafouk: persist the spell-check outcome. The check itself is stateless
+  # (no row per typing-prefetch), so the audit event is created HERE — once,
+  # at decision time: a modal callback (تصحيح وإرسال / إرسال كما هو / تعديل
+  # النص) or a clean send (no_errors_send). Fire-and-forget from the client so
+  # a slow audit-log write never delays the actual customer reply.
+  #
+  # Legacy update path: pre-deploy clients still send an `event_id` from the
+  # old per-check row; keep updating it verbatim for rolling-deploy safety.
   def spell_check_decision
+    if params[:event_id].present?
+      update_spell_check_event
+    else
+      create_spell_check_event(normalized_decision)
+    end
+    head :ok
+  end
+
+  private
+
+  # Legacy in-place update for clients that created the event at check time
+  # and pass its id back. Removed once all clients run the create-at-decision
+  # path. (Pre-deploy behaviour, kept verbatim.)
+  def update_spell_check_event
     event = Current.account.spell_check_events.find_by(id: params[:event_id])
     # Block missing events and accidental cross-account writes (the policy
     # already gates the controller; this guards the per-agent session row).
-    return head :ok unless event && event_writable_by_current_user?(event)
+    return unless event && event_writable_by_current_user?(event)
 
     decision = normalized_decision
     # A final decision (corrected/sent_original/edited) must always persist —
@@ -115,10 +123,55 @@ class Api::V1::Accounts::Captain::TasksController < Api::V1::Accounts::BaseContr
     # final decision the event already holds 'pending'. Only block the reverse:
     # a stray late 'pending' must not clobber an already-final decision.
     event.update(decision: decision) unless clobbers_final_decision?(event, decision)
-    head :ok
   end
 
-  private
+  # Create the audit row at decision time. user_id is always the current agent
+  # (never client-trusted); category is recomputed server-side inside
+  # SpellCheckFix.record_for. Wrapped in rescue so an audit-log failure can
+  # never 500 / block the agent's reply — we'd rather lose a stat.
+  def create_spell_check_event(decision)
+    event = Current.account.spell_check_events.create!(new_event_attributes(decision))
+    SpellCheckFix.record_for(event, spell_check_fixes_params)
+  rescue StandardError => e
+    Rails.logger.warn "[spell_check] event create failed: #{e.message[0, 120]}"
+  end
+
+  def new_event_attributes(decision)
+    conversation_id = resolve_conversation_id
+    {
+      decision: decision,
+      user_id: Current.user&.id,
+      conversation_id: conversation_id,
+      inbox_id: resolve_inbox_id(conversation_id),
+      surface: params[:surface].to_s.presence || 'dm',
+      has_errors: decision != 'no_errors_send',
+      model_used: params[:model_used],
+      original_length: params[:original].to_s.length,
+      corrected_length: params[:corrected].to_s.length,
+      errors_count: Array(params[:fixes]).size
+    }
+  end
+
+  def spell_check_response(result)
+    {
+      has_errors: result[:has_errors] ? true : false,
+      original: result[:original].to_s,
+      corrected: result[:corrected].to_s,
+      fixes: Array(result[:fixes]),
+      model_used: result[:model_used]
+    }
+  end
+
+  # Permit the client's fix list as a nested array of {wrong,right,why}; the
+  # category is NOT trusted from the client — record_for recomputes it via
+  # SpellCheckCategorizer.
+  def spell_check_fixes_params
+    Array(params[:fixes]).filter_map do |fix|
+      next unless fix.respond_to?(:permit)
+
+      fix.permit(:wrong, :right, :why).to_h.symbolize_keys
+    end
+  end
 
   def event_writable_by_current_user?(event)
     event.user_id.blank? || event.user_id == Current.user&.id

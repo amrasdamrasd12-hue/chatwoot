@@ -104,9 +104,11 @@ class TasksAPI extends ApiClient {
   }
 
   /**
-   * Eltafouk: pre-send spell/grammar check. Returns
-   * { has_errors, original, corrected, fixes }. The `surface` hint
-   * ("dm" / "comments") lets the backend short-circuit when the
+   * Eltafouk: stateless pre-send spell/grammar check. Returns
+   * { has_errors, original, corrected, fixes, model_used } and writes NO
+   * audit row — the outcome is persisted later via spellCheckDecisionCreate
+   * once the agent finalises the modal (or on a clean send). The `surface`
+   * hint ("dm" / "comments") lets the backend short-circuit when the
    * matching toggle is off in the per-account settings — that way a
    * disabled surface costs zero LLM tokens.
    */
@@ -123,9 +125,39 @@ class TasksAPI extends ApiClient {
   }
 
   /**
-   * Eltafouk: fire-and-forget finalization of a spell-check event.
-   * Called by the modal callbacks (corrected / sent_original / edited)
-   * so the reports page can break down behaviour per agent.
+   * Eltafouk: fire-and-forget create of the spell-check audit event at
+   * decision time (Solution 3). No event_id — the backend create branch
+   * builds the row from the decision plus the snapshot returned by
+   * /spell_check. Used by the modal callbacks (corrected / sent_original /
+   * edited) and the clean-send path (no_errors_send). Category is recomputed
+   * server-side; user_id is always the current agent. Never await before the
+   * actual send — call with .catch(() => {}).
+   */
+  spellCheckDecisionCreate({
+    decision,
+    original,
+    corrected,
+    fixes,
+    surface,
+    conversationDisplayId,
+    modelUsed,
+  }) {
+    return axios.post(`${this.url}/spell_check_decision`, {
+      decision,
+      original,
+      corrected,
+      fixes,
+      surface: surface || 'dm',
+      conversation_display_id: conversationDisplayId,
+      model_used: modelUsed,
+    });
+  }
+
+  /**
+   * Eltafouk: LEGACY fire-and-forget update of a pre-created spell-check
+   * event by id. Kept for rolling-deploy safety only — current clients use
+   * the create-at-decision path (spellCheckDecisionCreate). Removed once no
+   * client still carries an event_id.
    */
   spellCheckDecision(eventId, decision) {
     if (!eventId) return Promise.resolve();

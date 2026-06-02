@@ -1,14 +1,13 @@
 class Captain::SpellCheckService < Captain::BaseTaskService
-  # Optional context for the audit log row created on every call. The
-  # controller passes user_id/conversation_id/inbox_id/surface so the
-  # reports page can break events down by agent and channel.
+  # Stateless check — no audit row is written here. The /spell_check call is a
+  # typing prefetch that may never lead to a send, so persisting an event per
+  # check left orphaned 'draft' rows. The controller now creates the event
+  # once at decision time, so this service only runs the LLM and returns the
+  # result (plus the model that actually ran, for the controller to persist).
   pattr_initialize [
     :account!,
-    :content!,
-    { user_id: nil, conversation_id: nil, inbox_id: nil, surface: 'dm' }
+    :content!
   ]
-
-  attr_reader :event_id
 
   # Eltafouk: pre-send spell/grammar guard. Runs on every outgoing send so
   # latency dominates UX. Default `gpt-4.1-nano` (cheapest non-reasoning
@@ -40,11 +39,11 @@ class Captain::SpellCheckService < Captain::BaseTaskService
     return response if response.is_a?(Hash) && response[:error]
 
     result = Captain::SpellCheckLevelFilter.apply(parse_response(response[:message].to_s))
-    # Log the model that actually ran — when Vertex is active, the requested
-    # gpt-* model gets overridden to Gemini, so surface the real one.
+    # Surface the model that actually ran — when Vertex is active, the requested
+    # gpt-* model gets overridden to Gemini. The controller persists this on the
+    # event at decision time.
     actual_model = Llm::Config.vertex? ? Llm::Config::VERTEX_MODEL : model_to_use
-    record_event(actual_model, result)
-    result.merge(event_id: @event_id)
+    result.merge(model_used: actual_model)
   end
 
   private
@@ -140,39 +139,11 @@ class Captain::SpellCheckService < Captain::BaseTaskService
     nil
   end
 
+  # No LLM ran (empty/non-Arabic content, or strategy: skip), so there is no
+  # model to report — carry model_used: nil for a uniform shape so the
+  # controller renders the same keys on every path.
   def empty_result
-    { has_errors: false, original: content, corrected: content, fixes: [] }
-  end
-
-  # Log one row per *real* LLM call. Decision starts as "pending" when
-  # has_errors=true (the client finalises it after the modal closes), or
-  # "no_errors_send" otherwise (no modal will open, the send proceeds).
-  # Wrapped in rescue so an audit-log failure can never break a customer
-  # reply — we'd rather lose a stat than block an agent.
-  def record_event(model_used, result)
-    event = account.spell_check_events.create!(event_attributes(model_used, result))
-    @event_id = event.id
-    SpellCheckFix.record_for(event, result[:fixes])
-  rescue StandardError => e
-    Rails.logger.warn "[spell_check] event log failed: #{e.message[0, 120]}"
-    @event_id = nil
-  end
-
-  def event_attributes(model_used, result)
-    {
-      user_id: user_id,
-      conversation_id: conversation_id,
-      inbox_id: inbox_id,
-      surface: surface,
-      model_used: model_used,
-      has_errors: result[:has_errors] ? true : false,
-      # FILTERED fix count — `result` is post-SpellCheckLevelFilter, so this
-      # reflects what the agent actually sees, not the raw model count.
-      errors_count: Array(result[:fixes]).size,
-      original_length: content.to_s.length,
-      corrected_length: result[:corrected].to_s.length,
-      decision: result[:has_errors] ? 'draft' : 'no_errors_send'
-    }
+    { has_errors: false, original: content, corrected: content, fixes: [], model_used: nil }
   end
 
   # Tatweel (U+0640) plus zero-width/RTL marks (U+200B-200F, U+202A-202E):
