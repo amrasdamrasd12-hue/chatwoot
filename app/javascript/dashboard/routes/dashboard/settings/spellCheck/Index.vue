@@ -11,15 +11,11 @@ import SectionLayout from '../account/components/SectionLayout.vue';
 
 const { t } = useI18n();
 const store = useSpellCheckSettingsStore();
-const { settings, strictnessLabels, longMessageThreshold, uiFlags } =
-  storeToRefs(store);
+const { settings, longMessageThreshold, uiFlags } = storeToRefs(store);
 
 const localDmEnabled = ref(true);
 const localCommentsEnabled = ref(false);
-const localStrictness = ref(3);
 const localLongStrategy = ref('skip');
-const localEvaluationMode = ref(false);
-const localEvaluationStrictness = ref(4);
 
 const longStrategyOptions = computed(() => [
   {
@@ -71,29 +67,10 @@ const longStrategyOptions = computed(() => [
 const isLoading = computed(() => uiFlags.value.isFetching);
 const isSaving = computed(() => uiFlags.value.isUpdating);
 
-// Cosmetic guidance shown beneath the strictness slider. The model
-// receives the same intent via the Liquid template; this is just the
-// human-readable companion.
-const strictnessHelp = computed(() => {
-  const map = {
-    1: 'يصحّح فقط أوضح الأخطاء الإملائية. مناسب للبداية.',
-    2: 'يصحّح الأخطاء الإملائية الشائعة فقط.',
-    3: 'إملاء + قواعد بسيطة. مستوى متوازن.',
-    4: 'إملاء + قواعد + تنوين وهمزات.',
-    5: 'كل القواعد النحوية. للموظفين المتمرّسين.',
-    6: 'أعلى مستوى. يصحّح كل خطأ مهما كان طفيفاً.',
-  };
-  return map[localStrictness.value] || '';
-});
-
 const refreshFromStore = () => {
   localDmEnabled.value = settings.value.dm_enabled !== false;
   localCommentsEnabled.value = settings.value.comments_enabled === true;
-  localStrictness.value = Number(settings.value.strictness) || 3;
   localLongStrategy.value = settings.value.long_message_strategy || 'skip';
-  localEvaluationMode.value = settings.value.evaluation_mode === true;
-  localEvaluationStrictness.value =
-    Number(settings.value.evaluation_strictness) || 4;
 };
 
 watch(settings, refreshFromStore, { deep: true });
@@ -108,10 +85,7 @@ const save = async () => {
     await store.update({
       dm_enabled: localDmEnabled.value,
       comments_enabled: localCommentsEnabled.value,
-      strictness: localStrictness.value,
       long_message_strategy: localLongStrategy.value,
-      evaluation_mode: localEvaluationMode.value,
-      evaluation_strictness: localEvaluationStrictness.value,
     });
     useAlert(t('SPELL_CHECK_SETTINGS.SAVE_SUCCESS'));
   } catch (e) {
@@ -226,66 +200,6 @@ const save = async () => {
           </div>
         </SectionLayout>
 
-        <!-- Strictness -->
-        <SectionLayout
-          :title="t('SPELL_CHECK_SETTINGS.STRICTNESS.TITLE')"
-          :description="t('SPELL_CHECK_SETTINGS.STRICTNESS.DESCRIPTION')"
-          with-border
-        >
-          <div class="flex flex-col gap-4">
-            <!-- Current level chip -->
-            <div class="flex items-center gap-3">
-              <span
-                class="rounded-full bg-n-amber-3 px-3 py-1 text-[12px] font-bold text-n-amber-12 ring-1 ring-n-amber-7"
-              >
-                {{
-                  t('SPELL_CHECK_SETTINGS.STRICTNESS.LEVEL_BADGE', {
-                    level: localStrictness,
-                  })
-                }}
-              </span>
-              <span class="text-[15px] font-semibold text-n-slate-12">
-                {{ strictnessLabels[localStrictness] }}
-              </span>
-            </div>
-
-            <!-- Slider -->
-            <div class="rounded-xl border border-n-weak bg-n-solid-1 p-5">
-              <input
-                v-model.number="localStrictness"
-                type="range"
-                min="1"
-                max="6"
-                step="1"
-                class="h-2 w-full cursor-pointer appearance-none rounded-full bg-n-alpha-2 accent-n-brand outline-none"
-              />
-              <div
-                class="mt-3 grid grid-cols-6 gap-1 text-center text-[11px] font-medium text-n-slate-11"
-              >
-                <button
-                  v-for="lvl in 6"
-                  :key="lvl"
-                  type="button"
-                  class="rounded-md py-1 transition-colors"
-                  :class="
-                    localStrictness === lvl
-                      ? 'bg-n-brand text-white'
-                      : 'hover:bg-n-alpha-2'
-                  "
-                  @click="localStrictness = lvl"
-                >
-                  {{ strictnessLabels[lvl] }}
-                </button>
-              </div>
-              <p
-                class="mt-3 rounded-md bg-n-alpha-1 px-3 py-2 text-[12.5px] italic text-n-slate-11"
-              >
-                {{ strictnessHelp }}
-              </p>
-            </div>
-          </div>
-        </SectionLayout>
-
         <!-- Long message strategy -->
         <SectionLayout
           :title="t('SPELL_CHECK_SETTINGS.LONG_STRATEGY.TITLE')"
@@ -350,92 +264,6 @@ const save = async () => {
                 />
               </span>
             </label>
-          </div>
-        </SectionLayout>
-
-        <!-- Evaluation mode — opt-in consistent ruler for staff scoring -->
-        <SectionLayout
-          :title="t('SPELL_CHECK_SETTINGS.EVALUATION.TITLE')"
-          :description="t('SPELL_CHECK_SETTINGS.EVALUATION.DESCRIPTION')"
-          with-border
-        >
-          <div class="flex flex-col gap-4">
-            <label
-              class="group flex cursor-pointer items-start justify-between gap-4 rounded-xl border border-n-weak bg-n-solid-1 p-4 transition-colors hover:border-n-slate-6"
-            >
-              <div class="flex items-start gap-3">
-                <span
-                  class="grid size-9 shrink-0 place-items-center rounded-lg bg-n-amber-3 ring-1 ring-n-amber-6"
-                  aria-hidden="true"
-                >
-                  <span class="i-lucide-scale size-[18px] text-n-amber-11" />
-                </span>
-                <div>
-                  <p class="text-[14.5px] font-medium text-n-slate-12">
-                    {{ t('SPELL_CHECK_SETTINGS.EVALUATION.TOGGLE_LABEL') }}
-                  </p>
-                  <p class="mt-1 text-[12.5px] text-n-slate-11">
-                    {{
-                      t('SPELL_CHECK_SETTINGS.EVALUATION.TOGGLE_DESCRIPTION')
-                    }}
-                  </p>
-                </div>
-              </div>
-              <input
-                v-model="localEvaluationMode"
-                type="checkbox"
-                class="peer sr-only"
-              />
-              <span
-                class="relative mt-1 inline-block h-6 w-11 shrink-0 rounded-full bg-n-alpha-3 transition-colors peer-checked:bg-n-brand"
-              >
-                <span
-                  class="absolute start-0.5 top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform"
-                  :class="
-                    localEvaluationMode
-                      ? 'translate-x-[1.25rem] rtl:-translate-x-[1.25rem]'
-                      : ''
-                  "
-                />
-              </span>
-            </label>
-
-            <!-- Fixed evaluation strictness — only when the mode is on -->
-            <div
-              v-if="localEvaluationMode"
-              class="rounded-xl border border-n-weak bg-n-solid-1 p-5"
-            >
-              <p class="mb-3 text-[13px] font-medium text-n-slate-12">
-                {{ t('SPELL_CHECK_SETTINGS.EVALUATION.LEVEL_LABEL') }}
-              </p>
-              <div
-                class="grid grid-cols-6 gap-1 text-center text-[11px] font-medium text-n-slate-11"
-              >
-                <button
-                  v-for="lvl in 6"
-                  :key="lvl"
-                  type="button"
-                  class="rounded-md py-1.5 transition-colors"
-                  :class="
-                    localEvaluationStrictness === lvl
-                      ? 'bg-n-brand text-white'
-                      : 'hover:bg-n-alpha-2'
-                  "
-                  @click="localEvaluationStrictness = lvl"
-                >
-                  {{ strictnessLabels[lvl] }}
-                </button>
-              </div>
-              <p
-                class="mt-3 flex items-start gap-1.5 rounded-md bg-n-amber-2 px-3 py-2 text-[12px] text-n-amber-12 ring-1 ring-n-amber-6"
-              >
-                <span
-                  class="i-lucide-info mt-0.5 size-3.5 shrink-0 text-n-amber-11"
-                  aria-hidden="true"
-                />
-                {{ t('SPELL_CHECK_SETTINGS.EVALUATION.NOTE') }}
-              </p>
-            </div>
           </div>
 
           <!-- Save action — covers all sections -->

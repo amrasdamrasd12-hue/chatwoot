@@ -712,7 +712,7 @@ const menuItems = computed(() => {
           to: accountScopedRoute('general_settings_index'),
         },
         // Eltafouk: pre-send Arabic spell-check guard configuration —
-        // toggles for DM/comments scope and a 6-level strictness dial.
+        // toggles for DM/comments scope and a long-message strategy.
         {
           name: 'Settings Spell Check',
           label: t('SIDEBAR.SPELL_CHECK'),

@@ -2,7 +2,7 @@
 import ApiClient from './ApiClient';
 
 // Eltafouk: account-scoped CRUD for the pre-send spell-check guard
-// settings (DM toggle, comments toggle, 6-level strictness).
+// settings (DM toggle, comments toggle, long-message strategy).
 class SpellCheckSettings extends ApiClient {
   constructor() {
     super('spell_check_settings', { accountScoped: true });
