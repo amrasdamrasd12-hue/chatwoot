@@ -26,27 +26,6 @@ class Captain::SpellCheckService < Captain::BaseTaskService
   # option stays available for accounts that explicitly want it.
   DEFAULT_STRATEGY = 'nano'.freeze
 
-  # Per-account strictness selector. The Liquid template branches on this
-  # integer so each level emits a different rulebook to the model. Default
-  # is 3 (middle of the road) — agents can dial up later as confidence
-  # grows. Labels live alongside the values so the prompt can quote them.
-  STRICTNESS_LABELS = {
-    1 => 'سطحي جداً',
-    2 => 'سطحي',
-    3 => 'متوسط',
-    4 => 'دقيق',
-    5 => 'صارم',
-    6 => 'صارم جداً'
-  }.freeze
-  DEFAULT_STRICTNESS = 3
-
-  # Evaluation mode pins a consistent, accurate ruler for staff scoring:
-  # everyone is measured by `mini` (nano hallucinates phantom errors that
-  # unfairly inflate counts) at a fixed strictness, regardless of the
-  # live agent-facing slider or the cost-saving long-message strategy.
-  # Off by default so normal accounts keep the cheap nano behaviour.
-  DEFAULT_EVAL_STRICTNESS = 4
-
   def perform
     stripped = content.to_s.strip
     return empty_result if stripped.empty?
@@ -60,7 +39,7 @@ class Captain::SpellCheckService < Captain::BaseTaskService
     response = make_api_call(model: model_to_use, messages: messages)
     return response if response.is_a?(Hash) && response[:error]
 
-    result = Captain::SpellCheckLevelFilter.apply(parse_response(response[:message].to_s), effective_strictness)
+    result = Captain::SpellCheckLevelFilter.apply(parse_response(response[:message].to_s))
     # Log the model that actually ran — when Vertex is active, the requested
     # gpt-* model gets overridden to Gemini, so surface the real one.
     actual_model = Llm::Config.vertex? ? Llm::Config::VERTEX_MODEL : model_to_use
@@ -69,26 +48,6 @@ class Captain::SpellCheckService < Captain::BaseTaskService
   end
 
   private
-
-  def strictness
-    raw = account.spell_check_settings.to_h['strictness'].to_i
-    raw.between?(1, 6) ? raw : DEFAULT_STRICTNESS
-  end
-
-  def evaluation_mode?
-    account.spell_check_settings.to_h['evaluation_mode'] == true
-  end
-
-  def evaluation_strictness
-    raw = account.spell_check_settings.to_h['evaluation_strictness'].to_i
-    raw.between?(1, 6) ? raw : DEFAULT_EVAL_STRICTNESS
-  end
-
-  # The strictness that actually runs (and gets logged): the fixed
-  # evaluation level when evaluation mode is on, otherwise the live slider.
-  def effective_strictness
-    evaluation_mode? ? evaluation_strictness : strictness
-  end
 
   def strategy
     raw = account.spell_check_settings.to_h['long_message_strategy'].to_s
@@ -102,10 +61,6 @@ class Captain::SpellCheckService < Captain::BaseTaskService
   #   hybrid → nano under the threshold, mini above it
   # Returns the model name to call, or nil to skip the API call entirely.
   def pick_model(stripped)
-    # Evaluation mode forces the accurate model everywhere — overrides the
-    # cost-saving strategy so logged ground-truth is consistent.
-    return MINI_MODEL if evaluation_mode?
-
     long = stripped.length >= LONG_MESSAGE_THRESHOLD
     strategy_model(strategy, long)
   end
@@ -120,12 +75,7 @@ class Captain::SpellCheckService < Captain::BaseTaskService
   end
 
   def system_prompt
-    level = effective_strictness
-    template = prompt_from_file('spell_check')
-    Liquid::Template.parse(template).render(
-      'strictness' => level,
-      'strictness_label' => STRICTNESS_LABELS[level]
-    )
+    Liquid::Template.parse(prompt_from_file('spell_check')).render
   end
 
   def messages
@@ -214,7 +164,6 @@ class Captain::SpellCheckService < Captain::BaseTaskService
       conversation_id: conversation_id,
       inbox_id: inbox_id,
       surface: surface,
-      strictness: effective_strictness,
       model_used: model_used,
       has_errors: result[:has_errors] ? true : false,
       # FILTERED fix count — `result` is post-SpellCheckLevelFilter, so this
