@@ -3,6 +3,7 @@ import Spinner from 'shared/components/Spinner.vue';
 import { useAlert } from 'dashboard/composables';
 import { mapGetters } from 'vuex';
 import { useAgentsList } from 'dashboard/composables/useAgentsList';
+import { useAdmin } from 'dashboard/composables/useAdmin';
 
 import ThumbnailGroup from 'dashboard/components/widgets/ThumbnailGroup.vue';
 import MultiselectDropdownItems from 'shared/components/ui/MultiselectDropdownItems.vue';
@@ -23,8 +24,10 @@ export default {
   },
   setup() {
     const { agentsList } = useAgentsList(false);
+    const { isAdmin } = useAdmin();
     return {
       agentsList,
+      isAdmin,
     };
   },
   data() {
@@ -138,6 +141,11 @@ export default {
       );
 
       if (isAgentSelected) {
+        const isSelf = agent.id === this.currentUser.id;
+        if (!this.isAdmin && !isSelf) {
+          useAlert(this.$t('CONVERSATION_PARTICIPANTS.API.REMOVE_NOT_ALLOWED'));
+          return;
+        }
         const updatedList = this.watchersList.filter(
           participant => participant.id !== agent.id
         );

@@ -107,10 +107,23 @@ RSpec.describe 'Notes API', type: :request do
       end
     end
 
-    context 'when it is an authenticated user' do
-      it 'delete note if agent' do
+    context 'when it is an agent' do
+      it 'does not allow the agent to delete the note' do
         delete "/api/v1/accounts/#{account.id}/contacts/#{contact.id}/notes/#{note.id}",
                headers: agent.create_new_auth_token,
+               as: :json
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(Note.exists?(note.id)).to be true
+      end
+    end
+
+    context 'when it is an administrator' do
+      let(:administrator) { create(:user, account: account, role: :administrator) }
+
+      it 'deletes the note' do
+        delete "/api/v1/accounts/#{account.id}/contacts/#{contact.id}/notes/#{note.id}",
+               headers: administrator.create_new_auth_token,
                as: :json
 
         expect(response).to have_http_status(:success)

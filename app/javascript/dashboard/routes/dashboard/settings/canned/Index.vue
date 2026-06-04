@@ -6,6 +6,7 @@ import BaseSettingsHeader from '../components/BaseSettingsHeader.vue';
 import { computed, onMounted, ref, defineOptions } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useStoreGetters, useStore } from 'dashboard/composables/store';
+import { useAdmin } from 'dashboard/composables/useAdmin';
 import { useMessageFormatter } from 'shared/composables/useMessageFormatter';
 
 import Button from 'dashboard/components-next/button/Button.vue';
@@ -16,6 +17,7 @@ defineOptions({
 
 const getters = useStoreGetters();
 const store = useStore();
+const { isAdmin } = useAdmin();
 const { t } = useI18n();
 
 const { getPlainText } = useMessageFormatter();
@@ -197,6 +199,7 @@ const tableHeaders = computed(() => {
                 @click="openEditPopup(cannedItem)"
               />
               <Button
+                v-if="isAdmin"
                 v-tooltip.top="$t('CANNED_MGMT.DELETE.BUTTON_TEXT')"
                 icon="i-lucide-trash-2"
                 xs

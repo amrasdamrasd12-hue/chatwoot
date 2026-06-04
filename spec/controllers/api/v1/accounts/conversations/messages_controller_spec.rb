@@ -198,16 +198,29 @@ RSpec.describe 'Conversation Messages API', type: :request do
       end
     end
 
-    context 'when it is an authenticated user with access to conversation' do
+    context 'when it is an agent with access to conversation' do
       let(:agent) { create(:user, account: account, role: :agent) }
 
       before do
         create(:inbox_member, inbox: conversation.inbox, user: agent)
       end
 
-      it 'deletes the message' do
+      it 'does not allow the agent to delete the message' do
         delete "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/messages/#{message.id}",
                headers: agent.create_new_auth_token,
+               as: :json
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(message.reload.content_attributes['deleted']).to be_nil
+      end
+    end
+
+    context 'when it is an administrator' do
+      let(:administrator) { create(:user, account: account, role: :administrator) }
+
+      it 'deletes the message' do
+        delete "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/messages/#{message.id}",
+               headers: administrator.create_new_auth_token,
                as: :json
 
         expect(response).to have_http_status(:success)
@@ -224,7 +237,7 @@ RSpec.describe 'Conversation Messages API', type: :request do
         )
 
         delete "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/messages/#{interactive_message.id}",
-               headers: agent.create_new_auth_token,
+               headers: administrator.create_new_auth_token,
                as: :json
 
         expect(response).to have_http_status(:success)

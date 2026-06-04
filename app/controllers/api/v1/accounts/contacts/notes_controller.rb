@@ -1,4 +1,5 @@
 class Api::V1::Accounts::Contacts::NotesController < Api::V1::Accounts::Contacts::BaseController
+  before_action :check_admin_authorization?, only: [:destroy]
   before_action :note, except: [:index, :create]
 
   def index

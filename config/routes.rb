@@ -168,6 +168,7 @@ Rails.application.routes.draw do
                   post :translate
                   post :retry
                   post :react
+                  patch :edit
                 end
               end
               resources :assignments, only: [:create]

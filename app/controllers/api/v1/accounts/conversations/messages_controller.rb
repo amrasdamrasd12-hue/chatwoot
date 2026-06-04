@@ -5,6 +5,21 @@ class Api::V1::Accounts::Conversations::MessagesController < Api::V1::Accounts::
     @messages = message_finder.perform
   end
 
+  # Edit the content of an internal note. Only private messages can be edited,
+  # and only by their author or an account administrator. The original text is
+  # preserved in content_attributes['previous_content'] so the UI can show an
+  # "edited" badge with the original content.
+  def edit
+    return head :unprocessable_entity unless message.private?
+    return head :forbidden unless can_edit_message?
+
+    new_content = permitted_params[:content].to_s.strip
+    return head :unprocessable_entity if new_content.blank?
+
+    persist_note_edit(new_content)
+    head :ok
+  end
+
   def create
     user = Current.user || @resource
     mb = Messages::MessageBuilder.new(user, @conversation, params)
@@ -19,6 +34,7 @@ class Api::V1::Accounts::Conversations::MessagesController < Api::V1::Accounts::
   end
 
   def destroy
+    authorize message, :destroy?
     ActiveRecord::Base.transaction do
       message.update!(content: I18n.t('conversations.messages.deleted'), content_type: :text, content_attributes: { deleted: true })
       message.attachments.destroy_all
@@ -95,7 +111,31 @@ class Api::V1::Accounts::Conversations::MessagesController < Api::V1::Accounts::
   end
 
   def permitted_params
-    params.permit(:id, :target_language, :status, :external_error, :emoji)
+    params.permit(:id, :target_language, :status, :external_error, :emoji, :content)
+  end
+
+  def can_edit_message?
+    authored = message.sender_type == 'User' && message.sender_id == Current.user&.id
+    authored || Current.account_user&.administrator?
+  end
+
+  def persist_note_edit(new_content)
+    history = (message.content_attributes['edit_history'] || []) + [previous_version_entry]
+    message.content = new_content
+    message.content_attributes = message.content_attributes.merge(
+      'edit_history' => history,
+      'previous_content' => message.content_attributes['previous_content'] || history.first['content']
+    )
+    message.save!
+    message.send_update_event
+  end
+
+  def previous_version_entry
+    {
+      'content' => message.content,
+      'edited_at' => Time.current.to_i,
+      'editor_name' => Current.user&.name
+    }
   end
 
   def already_translated_content_available?

@@ -1,9 +1,9 @@
 <script setup>
-import { onMounted, onUnmounted, computed, ref, toRefs } from 'vue';
+import { onMounted, onUnmounted, computed, ref, toRefs, nextTick } from 'vue';
 import MessageApi from 'dashboard/api/inbox/message';
 import { useTimeoutFn } from '@vueuse/core';
 import { provideMessageContext } from './provider.js';
-import { useTrack } from 'dashboard/composables';
+import { useTrack, useAlert } from 'dashboard/composables';
 import { useMapGetter } from 'dashboard/composables/store';
 import { emitter } from 'shared/helpers/mitt';
 import { useI18n } from 'vue-i18n';
@@ -203,6 +203,51 @@ const handleReaction = async emoji => {
   }
 };
 const { t } = useI18n();
+
+const currentRole = useMapGetter('getCurrentRole');
+
+// Internal notes can be edited by their author or an account administrator.
+// The serialized sender type is lowercase ('user'), so compare case-insensitively.
+const canEditNote = computed(() => {
+  if (!props.private) return false;
+  const isAuthor =
+    props.sender?.type?.toLowerCase() === SENDER_TYPES.USER.toLowerCase() &&
+    props.sender?.id === props.currentUserId;
+  return isAuthor || currentRole.value === 'administrator';
+});
+
+const isEditing = ref(false);
+const editContent = ref('');
+const editTextarea = ref(null);
+
+const editNoteLabel = 'تعديل الملاحظة';
+const saveLabel = 'حفظ';
+const cancelLabel = 'إلغاء';
+const moreActionsLabel = 'المزيد';
+
+const startEdit = () => {
+  editContent.value = props.content ?? '';
+  isEditing.value = true;
+  nextTick(() => editTextarea.value?.focus());
+};
+
+const cancelEdit = () => {
+  isEditing.value = false;
+};
+
+const saveEdit = async () => {
+  const trimmed = editContent.value.trim();
+  if (!trimmed || trimmed === props.content) {
+    isEditing.value = false;
+    return;
+  }
+  try {
+    await MessageApi.editMessage(props.conversationId, props.id, trimmed);
+    isEditing.value = false;
+  } catch (e) {
+    useAlert('تعذّر حفظ التعديل، حاول مرة أخرى');
+  }
+};
 const route = useRoute();
 const inboxGetter = useMapGetter('inboxes/getInbox');
 const inbox = computed(() => inboxGetter.value(props.inboxId) || {});
@@ -433,7 +478,13 @@ const contextMenuEnabledOptions = computed(() => {
 
   return {
     copy: hasText,
+    edit:
+      canEditNote.value &&
+      hasText &&
+      !isFailedOrProcessing &&
+      !isMessageDeleted.value,
     delete:
+      currentRole.value === 'administrator' &&
       (hasText || hasAttachments) &&
       !isFailedOrProcessing &&
       !isMessageDeleted.value,
@@ -654,7 +705,36 @@ provideMessageContext({
         @contextmenu="openContextMenu($event)"
         @dblclick="handleDoubleClick"
       >
-        <div class="flex max-w-full">
+        <div
+          v-if="isEditing"
+          class="flex flex-col gap-2 w-80 max-w-full rounded-xl bg-n-solid-amber p-2.5"
+        >
+          <textarea
+            ref="editTextarea"
+            v-model="editContent"
+            rows="3"
+            dir="auto"
+            class="w-full resize-none rounded-lg border border-n-weak bg-n-background p-2 text-sm text-n-slate-12 focus:outline-none focus:ring-1 focus:ring-n-brand"
+            @keydown.esc="cancelEdit"
+            @keydown.meta.enter="saveEdit"
+            @keydown.ctrl.enter="saveEdit"
+          />
+          <div class="flex gap-2 justify-end">
+            <button
+              class="px-3 py-1 text-xs rounded-md border border-n-weak text-n-slate-11 hover:bg-n-alpha-1 cursor-pointer"
+              @click.stop="cancelEdit"
+            >
+              {{ cancelLabel }}
+            </button>
+            <button
+              class="px-3 py-1 text-xs rounded-md bg-n-brand text-white hover:brightness-110 cursor-pointer"
+              @click.stop="saveEdit"
+            >
+              {{ saveLabel }}
+            </button>
+          </div>
+        </div>
+        <div v-else class="flex max-w-full">
           <Component :is="componentToRender" />
         </div>
 
@@ -683,6 +763,32 @@ provideMessageContext({
             >
               {{ group.count }}
             </span>
+          </button>
+        </div>
+
+        <!-- Hover actions for internal notes: quick edit + more actions menu -->
+        <div
+          v-if="isBubble && props.private && !isEditing"
+          class="message-edit-action absolute top-1/2 -translate-y-1/2 z-20 flex gap-1 items-center"
+          :class="{
+            'ltr:-left-14 rtl:-right-14': orientation === ORIENTATION.RIGHT,
+            'ltr:-right-14 rtl:-left-14': orientation === ORIENTATION.LEFT,
+          }"
+        >
+          <button
+            v-if="canEditNote"
+            :title="editNoteLabel"
+            class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-n-background shadow border border-n-weak text-n-slate-11 hover:text-n-slate-12 cursor-pointer transition-all hover:bg-n-alpha-1 hover:scale-110"
+            @click.stop="startEdit"
+          >
+            <Icon icon="i-lucide-pencil" class="size-4" />
+          </button>
+          <button
+            :title="moreActionsLabel"
+            class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-n-background shadow border border-n-weak text-n-slate-11 hover:text-n-slate-12 cursor-pointer transition-all hover:bg-n-alpha-1 hover:scale-110"
+            @click.stop="openContextMenu($event)"
+          >
+            <Icon icon="i-lucide-ellipsis-vertical" class="size-4" />
           </button>
         </div>
 
@@ -752,6 +858,7 @@ provideMessageContext({
           @open="openContextMenu"
           @close="closeContextMenu"
           @reply-to="handleReplyTo"
+          @edit="startEdit"
         />
       </div>
     </div>
@@ -792,6 +899,15 @@ provideMessageContext({
 }
 
 .message-bubble-container:hover .emoji-react-btn {
+  opacity: 1;
+}
+
+.message-edit-action {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.message-bubble-container:hover .message-edit-action {
   opacity: 1;
 }
 </style>

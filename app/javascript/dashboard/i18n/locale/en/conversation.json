@@ -438,7 +438,8 @@
     "YOU_ARE_WATCHING": "You are participating",
     "API": {
       "ERROR_MESSAGE": "Could not update, try again!",
-      "SUCCESS_MESSAGE": "Participants updated!"
+      "SUCCESS_MESSAGE": "Participants updated!",
+      "REMOVE_NOT_ALLOWED": "Only administrators can remove other participants."
     }
   },
   "TRANSLATE_MODAL": {

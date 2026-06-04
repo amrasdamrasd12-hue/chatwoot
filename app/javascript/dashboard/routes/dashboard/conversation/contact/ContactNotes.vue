@@ -3,6 +3,7 @@ import { watch, computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useKeyboardEvents } from 'dashboard/composables/useKeyboardEvents';
 import { useStore, useMapGetter } from 'dashboard/composables/store';
+import { useAdmin } from 'dashboard/composables/useAdmin';
 
 import Editor from 'dashboard/components-next/Editor/Editor.vue';
 import NextButton from 'dashboard/components-next/button/Button.vue';
@@ -14,6 +15,7 @@ const props = defineProps({
 });
 
 const { t } = useI18n();
+const { isAdmin } = useAdmin();
 const store = useStore();
 const currentUser = useMapGetter('getCurrentUser');
 const uiFlags = useMapGetter('contactNotes/getUIFlags');
@@ -125,7 +127,7 @@ watch(
         class="py-4 last-of-type:border-b-0 px-4"
         :note="note"
         :written-by="getWrittenBy(note)"
-        allow-delete
+        :allow-delete="isAdmin"
         collapsible
         @delete="onDelete"
       />
