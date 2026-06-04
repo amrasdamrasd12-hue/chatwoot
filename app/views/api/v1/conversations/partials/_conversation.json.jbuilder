@@ -137,6 +137,17 @@ if last_non_activity
 else
   json.last_non_activity_message nil
 end
+# Eltafouk: name of whoever last replied to the customer — agent, bot, or an
+# automated out-of-office (template) message — shown on each conversation-list
+# row so supervisors can tell who last handled the chat without opening it.
+# Bulk-preloaded to avoid an N+1; single-record endpoints fall back to a lookup.
+reply_message_types = Message.message_types.values_at('outgoing', 'template')
+preloaded_last_outgoing = (Thread.current[ConversationListPreloader::STORE_LAST_OUTGOING] || {})[conversation.id]
+last_outgoing = preloaded_last_outgoing ||
+                conversation.messages.where(account_id: conversation.account_id)
+                            .where(message_type: reply_message_types, private: false)
+                            .reorder(created_at: :desc).first
+json.last_reply_agent_name(last_outgoing ? (last_outgoing.sender&.name.presence || 'Bot') : nil)
 json.last_activity_at conversation.last_activity_at.to_i
 json.priority conversation.priority
 unless slim

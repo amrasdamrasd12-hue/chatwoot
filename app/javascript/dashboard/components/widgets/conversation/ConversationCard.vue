@@ -22,7 +22,8 @@ const props = defineProps({
   hideThumbnail: { type: Boolean, default: false },
   teamId: { type: [String, Number], default: 0 },
   foldersId: { type: [String, Number], default: 0 },
-  showAssignee: { type: Boolean, default: false },
+  showAssignee: { type: Boolean, default: false }, // eslint-disable-line vue/no-unused-properties
+
   conversationType: { type: String, default: '' },
   selected: { type: Boolean, default: false },
   compact: { type: Boolean, default: false },
@@ -62,14 +63,6 @@ const accountId = useMapGetter('getCurrentAccountId');
 
 const chatMetadata = computed(() => props.chat.meta || {});
 
-const assignee = computed(() => chatMetadata.value.assignee || {});
-
-const assigneeFirstName = computed(() => {
-  const name = assignee.value.name;
-  if (!name) return '';
-  return name.split(' ')[0];
-});
-
 const senderId = computed(() => chatMetadata.value.sender?.id);
 
 const currentContact = computed(() => {
@@ -89,6 +82,25 @@ const hasUnread = computed(() => unreadCount.value > 0);
 const isInboxNameVisible = computed(() => !activeInbox.value);
 
 const lastMessageInChat = computed(() => getLastMessage(props.chat));
+
+// First name of whoever last replied to the customer — agent, bot, or an
+// automated out-of-office reply. Prefers the latest in-store message when it's
+// a non-private reply (so the card updates live the moment a reply is sent),
+// and falls back to the backend value for when the customer messaged after.
+// message_type 1 = outgoing, 3 = template/auto-reply (raw types, matching
+// getLastMessage's convention). Bot/automated senders fall back to 'Bot'.
+const lastReplyName = computed(() => {
+  const last = lastMessageInChat.value;
+  if (
+    last &&
+    (last.message_type === 1 || last.message_type === 3) &&
+    !last.private
+  ) {
+    return (last.sender?.name || 'Bot').split(' ')[0];
+  }
+  const backendName = props.chat.last_reply_agent_name;
+  return backendName ? backendName.split(' ')[0] : null;
+});
 
 const voiceCallData = computed(() => ({
   status: props.chat.additional_attributes?.call_status,
@@ -256,11 +268,7 @@ const showInboxName = computed(() => {
 });
 
 const showMetaSection = computed(() => {
-  return (
-    showInboxName.value ||
-    (props.showAssignee && assignee.value.name) ||
-    props.chat.priority
-  );
+  return showInboxName.value || props.chat.priority;
 });
 
 const hasSlaPolicyId = computed(() => props.chat?.sla_policy_id);
@@ -451,13 +459,6 @@ const deleteConversation = () => {
             'flex-1 justify-between': !showInboxName,
           }"
         >
-          <span
-            v-if="showAssignee && assignee.name"
-            class="text-n-slate-11 text-xs font-medium leading-3 py-0.5 px-0 inline-flex items-center truncate"
-          >
-            <fluent-icon icon="person" size="12" class="text-n-slate-11" />
-            {{ assigneeFirstName }}
-          </span>
           <PriorityMark :priority="chat.priority" class="flex-shrink-0" />
         </div>
       </div>
@@ -577,9 +578,16 @@ const deleteConversation = () => {
         :class="showMetaSection ? 'top-8' : 'top-4'"
       >
         <span
-          class="ml-auto font-normal leading-4 text-xxs"
+          class="relative ml-auto font-normal leading-4 text-xxs"
           :class="hasUnread ? 'text-[#25D366]' : 'text-n-slate-10'"
         >
+          <span
+            v-if="lastReplyName"
+            :title="lastReplyName"
+            class="absolute bottom-full mb-0.5 ltr:right-0 rtl:left-0 max-w-[110px] truncate whitespace-nowrap font-medium leading-4 text-xxs text-n-slate-11"
+          >
+            {{ lastReplyName }}
+          </span>
           <TimeAgo
             :last-activity-timestamp="chat.timestamp"
             :created-at-timestamp="chat.created_at"

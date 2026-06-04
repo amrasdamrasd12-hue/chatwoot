@@ -16,6 +16,7 @@ module ConversationListPreloader
   STORE_LAST_NON_ACTIVITY  = :conv_preload_last_non_activity
   STORE_UNREAD_COUNTS      = :conv_preload_unread_counts
   STORE_LAST_INCOMING      = :conv_preload_last_incoming
+  STORE_LAST_OUTGOING      = :conv_preload_last_outgoing
   STORE_AVAILABILITY       = :conv_preload_availability
 
   # Cap kept in sync with Conversation#unread_incoming_messages
@@ -35,11 +36,13 @@ module ConversationListPreloader
     Thread.current[STORE_LAST_NON_ACTIVITY] = bulk_last_non_activity_messages(ids, last_messages)
     Thread.current[STORE_UNREAD_COUNTS]     = bulk_unread_counts(ids)
     Thread.current[STORE_LAST_INCOMING]     = bulk_last_incoming_messages(ids)
+    Thread.current[STORE_LAST_OUTGOING]     = bulk_last_outgoing_messages(ids)
     Thread.current[STORE_AVAILABILITY]      = bulk_availability(account_id)
   end
 
   def clear_conversation_list_preload
-    [STORE_LAST_MESSAGE, STORE_LAST_NON_ACTIVITY, STORE_UNREAD_COUNTS, STORE_LAST_INCOMING, STORE_AVAILABILITY].each do |key|
+    [STORE_LAST_MESSAGE, STORE_LAST_NON_ACTIVITY, STORE_UNREAD_COUNTS, STORE_LAST_INCOMING, STORE_LAST_OUTGOING,
+     STORE_AVAILABILITY].each do |key|
       Thread.current[key] = nil
     end
   end
@@ -110,6 +113,20 @@ module ConversationListPreloader
                         .order('conversation_id, created_at DESC, id DESC')
                         .pluck(:id)
     Message.where(id: latest_ids).index_by(&:conversation_id)
+  end
+
+  # Eltafouk: latest reply sent to the customer per conversation — any
+  # non-private outgoing or template message (template covers automated
+  # out-of-office replies). Powers the "last reply" name on each
+  # conversation-list row. Sender is preloaded so the partial reads the name
+  # without an N+1.
+  def bulk_last_outgoing_messages(ids)
+    reply_types = Message.message_types.values_at('outgoing', 'template')
+    latest_ids = Message.where(conversation_id: ids, message_type: reply_types, private: false)
+                        .select('DISTINCT ON (conversation_id) id')
+                        .order('conversation_id, created_at DESC, id DESC')
+                        .pluck(:id)
+    Message.where(id: latest_ids).includes(:sender).index_by(&:conversation_id)
   end
 
   # Eltafouk: contact availability (online?) and user availability
