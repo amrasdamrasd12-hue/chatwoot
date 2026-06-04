@@ -1577,6 +1577,11 @@ export default {
         setTimeout(() => {
           this.isFlashing = false;
         }, 400);
+        // Return the cursor to the editor so the agent can type the reply
+        // immediately without having to click into the input again.
+        this.$nextTick(() => {
+          emitter.emit(BUS_EVENTS.FOCUS_MESSAGE_EDITOR);
+        });
       }
     },
     resetReplyToMessage() {

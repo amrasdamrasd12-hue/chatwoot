@@ -1006,6 +1006,10 @@ onMounted(() => {
 // Components using this
 // 1. SearchPopover.vue
 useEmitter(BUS_EVENTS.INSERT_INTO_RICH_EDITOR, insertContentIntoEditor);
+
+// BUS Event to move focus back into the editor, e.g. after clicking the
+// "Reply to" button on a message so the agent can start typing right away.
+useEmitter(BUS_EVENTS.FOCUS_MESSAGE_EDITOR, () => focusEditorInputField('end'));
 </script>
 
 <template>
