@@ -695,7 +695,8 @@
           "LINKED": "Linked to ERP",
           "UNLINKED": "Not linked",
           "SYNC_REQUIRED": "Needs sync",
-          "SYNC_FAILED": "Sync failed"
+          "SYNC_FAILED": "Sync failed",
+          "OPEN_IN_ERP": "Open in ERP"
         },
         "PHONE_TABLE": {
           "MOBILE_OWNER": "Mobile Owner",

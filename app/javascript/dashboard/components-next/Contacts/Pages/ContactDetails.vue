@@ -89,6 +89,13 @@ const erpStatusClass = computed(() => {
   return map[erpLinkStatus.value] || 'bg-n-alpha-2 text-n-slate-10';
 });
 
+const ERP_BASE_URL = 'https://erp.eltafouk.com';
+
+const erpUrl = computed(() => {
+  const code = props.selectedContact?.additionalAttributes?.erpCustomer;
+  return code ? `${ERP_BASE_URL}/app/customer/${encodeURIComponent(code)}` : '';
+});
+
 const lastActivityAt = computed(() => {
   return contactData.value?.lastActivityAt
     ? dynamicTime(contactData.value.lastActivityAt, locale.value)
@@ -186,6 +193,20 @@ const handleAvatarDelete = async () => {
             >
               {{ erpStatusLabel }}
             </span>
+            <a
+              v-if="erpUrl"
+              :href="erpUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center gap-1 text-xs font-medium text-n-blue-11 hover:underline"
+            >
+              <span class="i-ph-arrow-square-out size-3.5" />
+              {{
+                $t(
+                  'CONTACTS_LAYOUT.CARD.EDIT_DETAILS_FORM.ERP_STATUS.OPEN_IN_ERP'
+                )
+              }}
+            </a>
           </div>
           <span
             dir="auto"
