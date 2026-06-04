@@ -49,9 +49,7 @@ const agentNameToShow = computed(() => {
 
 const showAgentName = computed(() => {
   return (
-    messageType.value === MESSAGE_TYPES.OUTGOING &&
-    !isPrivate.value &&
-    !!agentNameToShow.value
+    messageType.value === MESSAGE_TYPES.OUTGOING && !!agentNameToShow.value
   );
 });
 
@@ -157,8 +155,41 @@ const fbPageUiTooltip =
 
 const isEdited = computed(() => !!contentAttributes.value?.previousContent);
 const editedLabel = '✎ تم التعديل';
+
+// All previous versions of the note (oldest first). Falls back to a single
+// entry built from previousContent for channel edits that don't track history.
+const editHistory = computed(() => {
+  const history = contentAttributes.value?.editHistory;
+  if (Array.isArray(history) && history.length) return history;
+  const prev = contentAttributes.value?.previousContent;
+  return prev ? [{ content: prev }] : [];
+});
+
+const editHistoryHtml = computed(() =>
+  editHistory.value
+    .map(entry => {
+      const editedAt = entry.editedAt ?? entry.edited_at;
+      const editorName = entry.editorName ?? entry.editor_name;
+      const meta = [
+        editorName,
+        editedAt ? messageStamp(editedAt, 'MMM d, h:mm a') : '',
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      const metaHtml = meta
+        ? `<div style="font-size:10px;color:#9ca3af;margin-top:3px">${escapeHtml(meta)}</div>`
+        : '';
+      return `<div style="padding:7px 0;border-bottom:1px solid #f1f5f9"><div style="font-size:13px;color:#111827;line-height:1.6;word-break:break-word">${escapeHtml(entry.content ?? '')}</div>${metaHtml}</div>`;
+    })
+    .join('')
+);
+
+const editHistoryTitle = computed(() =>
+  editHistory.value.length > 1 ? 'تاريخ التعديلات' : 'الرسالة الأصلية'
+);
+
 const editedTooltip = computed(() => ({
-  content: `<div dir="rtl" style="text-align:center;padding:12px 16px;min-width:120px;max-width:220px"><div style="font-size:10px;font-weight:700;color:#9ca3af;margin-bottom:10px;letter-spacing:0.06em;text-transform:uppercase">الرسالة الأصلية</div><div style="font-size:13px;color:#111827;line-height:1.65;word-break:break-word">${escapeHtml(contentAttributes.value?.previousContent ?? '')}</div></div>`,
+  content: `<div dir="rtl" style="text-align:right;padding:10px 14px;min-width:160px;max-width:260px"><div style="font-size:10px;font-weight:700;color:#9ca3af;margin-bottom:8px;letter-spacing:0.06em;text-transform:uppercase">${editHistoryTitle.value}</div>${editHistoryHtml.value}</div>`,
   html: true,
   placement: 'bottom-start',
   triggers: ['click'],

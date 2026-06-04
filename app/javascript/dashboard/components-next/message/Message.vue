@@ -223,7 +223,6 @@ const editTextarea = ref(null);
 const editNoteLabel = 'تعديل الملاحظة';
 const saveLabel = 'حفظ';
 const cancelLabel = 'إلغاء';
-const moreActionsLabel = 'المزيد';
 
 const startEdit = () => {
   editContent.value = props.content ?? '';
@@ -478,11 +477,6 @@ const contextMenuEnabledOptions = computed(() => {
 
   return {
     copy: hasText,
-    edit:
-      canEditNote.value &&
-      hasText &&
-      !isFailedOrProcessing &&
-      !isMessageDeleted.value,
     delete:
       currentRole.value === 'administrator' &&
       (hasText || hasAttachments) &&
@@ -766,29 +760,21 @@ provideMessageContext({
           </button>
         </div>
 
-        <!-- Hover actions for internal notes: quick edit + more actions menu -->
+        <!-- Quick edit action for internal notes -->
         <div
-          v-if="isBubble && props.private && !isEditing"
-          class="message-edit-action absolute top-1/2 -translate-y-1/2 z-20 flex gap-1 items-center"
+          v-if="canEditNote && !isEditing"
+          class="message-edit-action absolute top-1/2 -translate-y-1/2 z-20 flex items-center"
           :class="{
             'ltr:-left-14 rtl:-right-14': orientation === ORIENTATION.RIGHT,
             'ltr:-right-14 rtl:-left-14': orientation === ORIENTATION.LEFT,
           }"
         >
           <button
-            v-if="canEditNote"
             :title="editNoteLabel"
             class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-n-background shadow border border-n-weak text-n-slate-11 hover:text-n-slate-12 cursor-pointer transition-all hover:bg-n-alpha-1 hover:scale-110"
             @click.stop="startEdit"
           >
             <Icon icon="i-lucide-pencil" class="size-4" />
-          </button>
-          <button
-            :title="moreActionsLabel"
-            class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-n-background shadow border border-n-weak text-n-slate-11 hover:text-n-slate-12 cursor-pointer transition-all hover:bg-n-alpha-1 hover:scale-110"
-            @click.stop="openContextMenu($event)"
-          >
-            <Icon icon="i-lucide-ellipsis-vertical" class="size-4" />
           </button>
         </div>
 
@@ -858,7 +844,6 @@ provideMessageContext({
           @open="openContextMenu"
           @close="closeContextMenu"
           @reply-to="handleReplyTo"
-          @edit="startEdit"
         />
       </div>
     </div>

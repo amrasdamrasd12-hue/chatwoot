@@ -1,5 +1,6 @@
 <script setup>
 import {
+  ref,
   computed,
   onMounted,
   nextTick,
@@ -67,14 +68,32 @@ const position = computed(() => {
   };
 });
 
+// When the menu is opened via right-click (contextmenu), the browser can pull
+// focus back right after the menu mounts, firing a premature blur that would
+// close the menu before it ever paints. Ignore blur until the menu has settled.
+const isReady = ref(false);
+
 onMounted(() => {
   isLocked.value = true;
-  nextTick(() => menuRef.value?.focus());
+  nextTick(() => {
+    menuRef.value?.focus();
+    setTimeout(() => {
+      isReady.value = true;
+    }, 100);
+  });
 });
 
 const handleClose = () => {
   isLocked.value = false;
   emit('close');
+};
+
+const handleBlur = () => {
+  if (!isReady.value) {
+    menuRef.value?.focus();
+    return;
+  }
+  handleClose();
 };
 
 onUnmounted(() => {
@@ -89,7 +108,7 @@ onUnmounted(() => {
       class="fixed outline-none z-[9999] cursor-pointer"
       :style="position"
       tabindex="0"
-      @blur="handleClose"
+      @blur="handleBlur"
     >
       <slot />
     </div>
