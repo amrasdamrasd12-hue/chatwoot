@@ -58,6 +58,8 @@ class ConversationFinder
   private
 
   def set_up
+    return set_up_mentions if params[:conversation_type] == 'mention'
+
     set_inboxes
     set_team
     set_assignee_type
@@ -68,6 +70,24 @@ class ConversationFinder
     filter_by_labels
     filter_by_query
     filter_by_source_id
+  end
+
+  # The Mentions folder is built directly from the current user's mention
+  # records — independent of inbox assignment, conversation status, and
+  # assignee tab. Access is already gated when the mention is created
+  # (Messages::MentionService#filter_mentioned_ids_by_inbox), so no further
+  # inbox/permission/status filtering is applied here: a mention in a
+  # resolved conversation or an inbox the agent no longer owns still shows.
+  def set_up_mentions
+    set_team
+    @assignee_type = 'all'
+
+    conversation_ids = current_account.mentions.where(user: current_user).pluck(:conversation_id)
+    @conversations = current_account.conversations.where(id: conversation_ids)
+
+    filter_by_team
+    filter_by_labels
+    filter_by_query
   end
 
   def set_inboxes
@@ -118,9 +138,6 @@ class ConversationFinder
 
   def filter_by_conversation_type
     case @params[:conversation_type]
-    when 'mention'
-      conversation_ids = current_account.mentions.where(user: current_user).pluck(:conversation_id)
-      @conversations = @conversations.where(id: conversation_ids)
     when 'participating'
       @conversations = current_user.participating_conversations.where(account_id: current_account.id)
     when 'unattended'

@@ -493,6 +493,16 @@ export default {
     },
   },
   watch: {
+    inboxId: {
+      immediate: true,
+      handler(id) {
+        // Populate the inbox's assignable agents so the @-mention autocomplete
+        // (private notes) can restrict suggestions to mentionable users only.
+        if (id) {
+          this.$store.dispatch('inboxAssignableAgents/fetch', [id]);
+        }
+      },
+    },
     currentChat(conversation, oldConversation) {
       const { can_reply: canReply } = conversation;
       if (oldConversation && oldConversation.id !== conversation.id) {
@@ -1692,6 +1702,7 @@ export default {
           v-else-if="!showAudioRecorderEditor"
           v-model="message"
           :conversation-id="conversationId"
+          :inbox-id="inboxId"
           :editor-id="editorStateId"
           class="input popover-prosemirror-menu"
           :is-private="isOnPrivateNote"

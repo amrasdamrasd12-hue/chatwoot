@@ -16,10 +16,15 @@ const state = {
   unreadMineCount: 0,
   unreadUnAssignedCount: 0,
   unreadAllCount: 0,
+  // Unread mentions for the current agent — drives the sidebar "Mentions" badge.
+  // Independent of inbox/status; fed by the /meta endpoint and bumped in
+  // real-time when a `conversation.mentioned` event arrives.
+  mentionCount: 0,
 };
 
 export const getters = {
   getStats: $state => $state,
+  getMentionCount: $state => $state.mentionCount,
 };
 
 // Create a debounced version of the actual API call function
@@ -85,6 +90,9 @@ export const actions = {
   set({ commit }, meta) {
     commit(types.SET_CONV_TAB_META, meta);
   },
+  incrementMentionCount({ commit }) {
+    commit(types.INCREMENT_MENTION_COUNT);
+  },
 };
 
 export const mutations = {
@@ -94,11 +102,17 @@ export const mutations = {
       mine_count: mineCount,
       unassigned_count: unAssignedCount,
       all_count: allCount,
+      mention_count: mentionCount,
     } = {}
   ) {
     $state.mineCount = mineCount;
     $state.allCount = allCount;
     $state.unAssignedCount = unAssignedCount;
+    // Only the /meta endpoint returns mention_count; guard so the index-meta
+    // path (which omits it) doesn't clobber the badge count back to undefined.
+    if (mentionCount !== undefined) {
+      $state.mentionCount = mentionCount;
+    }
     $state.updatedOn = new Date();
   },
   [types.SET_CONV_UNREAD_META](
@@ -112,6 +126,9 @@ export const mutations = {
     $state.unreadMineCount = mineCount;
     $state.unreadAllCount = allCount;
     $state.unreadUnAssignedCount = unAssignedCount;
+  },
+  [types.INCREMENT_MENTION_COUNT]($state) {
+    $state.mentionCount += 1;
   },
 };
 

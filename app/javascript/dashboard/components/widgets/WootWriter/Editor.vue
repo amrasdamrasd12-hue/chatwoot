@@ -97,6 +97,7 @@ const props = defineProps({
   allowSignature: { type: Boolean, default: false },
   channelType: { type: String, default: '' },
   conversationId: { type: Number, default: null },
+  inboxId: { type: Number, default: null },
   medium: { type: String, default: '' },
   showImageResizeToolbar: { type: Boolean, default: false }, // A kill switch to show or hide the image toolbar
   focusOnMount: { type: Boolean, default: true },
@@ -1018,6 +1019,7 @@ useEmitter(BUS_EVENTS.INSERT_INTO_RICH_EDITOR, insertContentIntoEditor);
     <TagAgents
       v-if="showUserMentions && isPrivate"
       :search-key="mentionSearchKey"
+      :inbox-id="inboxId"
       @select-agent="content => insertSpecialContent('mention', content)"
     />
     <CannedResponse

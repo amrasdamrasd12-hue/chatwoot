@@ -20,6 +20,9 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
   def meta
     result = conversation_finder.perform
     @conversations_count = result[:count]
+    # Unread mentions for the sidebar badge — computed directly from mentions so
+    # the count is independent of the inbox/status scope of the current view.
+    @mention_count = current_account.mentions.unread.where(user: Current.user).count
   end
 
   def search
@@ -118,6 +121,11 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
   end
 
   def update_last_seen
+    # Opening a conversation clears the agent's unread mention for it (before the
+    # throttle below, so a mention-only conversation still clears the sidebar
+    # badge). Does not touch conversation status.
+    Mention.mark_as_read(conversation: @conversation, user_id: Current.user.id)
+
     # High-traffic accounts generate excessive DB writes when agents frequently switch between conversations.
     # Throttle last_seen updates to once per hour when there are no unread messages to reduce DB load.
     # Always update immediately if there are unread messages to maintain accurate read/unread state.

@@ -391,6 +391,10 @@ const actions = {
   },
 
   addMentions({ dispatch, rootState }, conversation) {
+    // The `conversation.mentioned` event is broadcast only to the mentioned
+    // agent's pubsub token, so receiving it always means "I was mentioned" —
+    // bump the sidebar badge regardless of which view is currently open.
+    dispatch('conversationStats/incrementMentionCount', null, { root: true });
     if (isOnMentionsView(rootState)) {
       dispatch('updateConversation', conversation);
     }

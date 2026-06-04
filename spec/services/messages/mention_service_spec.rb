@@ -100,7 +100,9 @@ describe Messages::MentionService do
         expect(Conversations::UserMentionJob).to have_received(:perform_later).with(
           [first_agent.id.to_s],
           conversation.id,
-          account.id
+          account.id,
+          anything,
+          anything
         )
       end
 
@@ -160,7 +162,9 @@ describe Messages::MentionService do
         expect(Conversations::UserMentionJob).to have_received(:perform_later).with(
           contain_exactly(first_agent.id.to_s, second_agent.id.to_s),
           conversation.id,
-          account.id
+          account.id,
+          anything,
+          anything
         )
       end
     end
@@ -222,7 +226,9 @@ describe Messages::MentionService do
         expect(Conversations::UserMentionJob).to have_received(:perform_later).with(
           [first_agent.id.to_s],
           conversation.id,
-          account.id
+          account.id,
+          anything,
+          anything
         )
       end
     end
@@ -285,7 +291,9 @@ describe Messages::MentionService do
         expect(Conversations::UserMentionJob).to have_received(:perform_later).with(
           contain_exactly(first_agent.id.to_s, second_agent.id.to_s),
           conversation.id,
-          account.id
+          account.id,
+          anything,
+          anything
         )
       end
     end
@@ -399,7 +407,9 @@ describe Messages::MentionService do
         expect(Conversations::UserMentionJob).to have_received(:perform_later).with(
           contain_exactly(first_agent.id.to_s, second_agent.id.to_s),
           conversation.id,
-          account.id
+          account.id,
+          anything,
+          anything
         )
       end
     end

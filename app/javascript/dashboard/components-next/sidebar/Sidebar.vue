@@ -176,6 +176,7 @@ const contactCustomViews = useMapGetter('customViews/getContactCustomViews');
 const conversationCustomViews = useMapGetter(
   'customViews/getConversationCustomViews'
 );
+const mentionCount = useMapGetter('conversationStats/getMentionCount');
 
 onMounted(() => {
   store.dispatch('labels/get');
@@ -186,6 +187,8 @@ onMounted(() => {
   store.dispatch('attributes/get');
   store.dispatch('customViews/get', 'conversation');
   store.dispatch('customViews/get', 'contact');
+  // Seed the Mentions badge so it's correct on first paint regardless of route.
+  store.dispatch('conversationStats/get', {});
 });
 
 useEmitter('fetch_inbox_unattended_counts', () => {
@@ -310,6 +313,8 @@ const menuItems = computed(() => {
           label: t('SIDEBAR.MENTIONED_CONVERSATIONS'),
           activeOn: ['conversation_through_mentions'],
           to: accountScopedRoute('conversation_mentions'),
+          count: mentionCount.value,
+          showAlert: mentionCount.value > 0,
         },
         {
           name: 'Unattended',

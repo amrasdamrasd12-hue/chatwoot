@@ -10,13 +10,25 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  inboxId: {
+    type: Number,
+    default: null,
+  },
 });
 
 const emit = defineEmits(['selectAgent']);
 
 const { t } = useI18n();
 const getters = useStoreGetters();
-const agents = computed(() => getters['agents/getVerifiedAgents'].value);
+// Restrict suggestions to the conversation inbox's assignable agents (members +
+// admins) — matching the backend mention gate — so an out-of-inbox agent can't
+// be picked and then silently dropped. Falls back to all verified agents when
+// no inbox context is available.
+const agents = computed(() =>
+  props.inboxId
+    ? getters['inboxAssignableAgents/getAssignableAgents'].value(props.inboxId)
+    : getters['agents/getVerifiedAgents'].value
+);
 const teams = useMapGetter('teams/getTeams');
 
 const tagAgentsRef = ref(null);

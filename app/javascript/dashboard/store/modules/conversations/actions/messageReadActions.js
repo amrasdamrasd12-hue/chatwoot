@@ -3,7 +3,7 @@ import ConversationApi from '../../../../api/inbox/conversation';
 import mutationTypes from '../../../mutation-types';
 
 export default {
-  markMessagesRead: async ({ commit }, data) => {
+  markMessagesRead: async ({ commit, dispatch }, data) => {
     try {
       const {
         data: { id, agent_last_seen_at: lastSeen },
@@ -13,6 +13,9 @@ export default {
           commit(mutationTypes.UPDATE_MESSAGE_UNREAD_COUNT, { id, lastSeen }),
         4000
       );
+      // Opening the conversation clears its unread mention server-side;
+      // refetch the meta so the sidebar mention badge updates.
+      dispatch('conversationStats/get', {}, { root: true });
     } catch (error) {
       // Handle error
     }

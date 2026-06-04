@@ -300,7 +300,7 @@ describe('#actions', () => {
       axios.post.mockResolvedValue({
         data: { id: 1, agent_last_seen_at: lastSeen },
       });
-      await actions.markMessagesRead({ commit }, { id: 1 });
+      await actions.markMessagesRead({ commit, dispatch }, { id: 1 });
       vi.runAllTimers();
       expect(commit).toHaveBeenCalledTimes(1);
       expect(commit.mock.calls).toEqual([
@@ -309,7 +309,7 @@ describe('#actions', () => {
     });
     it('sends correct mutations if api is unsuccessful', async () => {
       axios.post.mockRejectedValue({ message: 'Incorrect header' });
-      await actions.markMessagesRead({ commit }, { id: 1 });
+      await actions.markMessagesRead({ commit, dispatch }, { id: 1 });
       expect(commit.mock.calls).toEqual([]);
     });
   });
@@ -565,16 +565,18 @@ describe('#deleteMessage', () => {
 });
 
 describe('#addMentions', () => {
-  it('does not send mutations if the view is not mentions', () => {
+  it('only increments the mention count if the view is not mentions', () => {
     actions.addMentions(
       { commit, dispatch, rootState: { route: { name: 'home' } } },
       { id: 1 }
     );
     expect(commit.mock.calls).toEqual([]);
-    expect(dispatch.mock.calls).toEqual([]);
+    expect(dispatch.mock.calls).toEqual([
+      ['conversationStats/incrementMentionCount', null, { root: true }],
+    ]);
   });
 
-  it('send mutations if the view is mentions', () => {
+  it('increments the count and updates the conversation if the view is mentions', () => {
     actions.addMentions(
       {
         dispatch,
@@ -583,6 +585,7 @@ describe('#addMentions', () => {
       { id: 1, meta: { sender: { id: 1 } } }
     );
     expect(dispatch.mock.calls).toEqual([
+      ['conversationStats/incrementMentionCount', null, { root: true }],
       ['updateConversation', { id: 1, meta: { sender: { id: 1 } } }],
     ]);
   });
